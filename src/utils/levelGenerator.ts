@@ -281,37 +281,68 @@ export const generateEnemies = (
 
     // Now find the final position, checking safe zone
     let attempts = 0;
+    const shouldSpawnInSafeZone =
+      (type === "turret" || type === "tank") && safeZoneActive;
+
     while (finalPosition === null && attempts < turretMaxRegenAttempts) {
       // Loop until finalPosition is assigned
-      let candidatePosition = generateRandomPosition(
-        config.gridSize,
-        existingPositions
-      );
+      let candidatePosition: [number, number, number];
+
+      // For tanks/turrets with active safe zone, generate positions inside the zone directly
+      if (shouldSpawnInSafeZone) {
+        const angle = Math.random() * Math.PI * 2;
+        const radius = Math.random() * safeZoneRadius * 0.9;
+        candidatePosition = [
+          safeZoneCenter[0] + Math.cos(angle) * radius,
+          0.5,
+          safeZoneCenter[1] + Math.sin(angle) * radius,
+        ];
+      } else {
+        candidatePosition = generateRandomPosition(
+          config.gridSize,
+          existingPositions
+        );
+      }
 
       // Extra validation for distance from terrain obstacles
+      // Use reduced clearance for small safe zones
+      const baseClearance =
+        shouldSpawnInSafeZone && safeZoneRadius < 15
+          ? Math.max(3, safeZoneRadius * 0.3)
+          : 7;
       let isClear = true;
       for (const obstacle of terrainObstacles) {
         const dx = obstacle.position[0] - candidatePosition[0];
         const dz = obstacle.position[2] - candidatePosition[2];
         const distance = Math.sqrt(dx * dx + dz * dz);
-        const minClearance = obstacle.size * 2.5 + 7; // Same clearance as respawnManager
+        const minClearance = obstacle.size * 2.5 + baseClearance;
         if (distance < minClearance) {
           isClear = false;
-          debug.warn(
-            "Enemy generation rejected position too close to obstacle:",
-            candidatePosition
-          );
           break;
+        }
+      }
+
+      // Check distance from existing positions
+      if (isClear) {
+        for (const existingPos of existingPositions) {
+          const dx = existingPos[0] - candidatePosition[0];
+          const dz = existingPos[2] - candidatePosition[2];
+          const distance = Math.sqrt(dx * dx + dz * dz);
+          if (distance < 5) {
+            isClear = false;
+            break;
+          }
         }
       }
 
       if (!isClear) {
         attempts++;
-        continue; // Skip to next attempt if not clear
+        continue;
       }
 
-      if ((type === "turret" || type === "tank") && safeZoneActive) {
-        const turretPosVec = new THREE.Vector2(
+      // Verify safe zone constraint if needed
+      if (shouldSpawnInSafeZone) {
+        const posVec = new THREE.Vector2(
           candidatePosition[0],
           candidatePosition[2]
         );
@@ -319,49 +350,23 @@ export const generateEnemies = (
           safeZoneCenter[0],
           safeZoneCenter[1]
         );
-        const distanceToCenter = turretPosVec.distanceTo(centerVec);
+        const distanceToCenter = posVec.distanceTo(centerVec);
 
         if (distanceToCenter <= safeZoneRadius) {
-          finalPosition = candidatePosition; // Position is valid
+          finalPosition = candidatePosition;
         } else {
-          // Position is outside the safe zone, try again or fallback
           attempts++;
-          if (attempts >= turretMaxRegenAttempts) {
-            debug.warn(
-              `${type} spawn failed after ${attempts} attempts to find position in safe zone. Placing near center.`
-            );
-            const angle = Math.random() * Math.PI * 2;
-            const radiusOffset = Math.min(safeZoneRadius * 0.8, 5);
-            let fallbackPosition: [number, number, number] = [
-              safeZoneCenter[0] + Math.cos(angle) * radiusOffset,
-              0.5,
-              safeZoneCenter[1] + Math.sin(angle) * radiusOffset,
-            ];
-            // Check if fallback position is clear
-            let fallbackClear = true;
-            for (const obstacle of terrainObstacles) {
-              const dx = obstacle.position[0] - fallbackPosition[0];
-              const dz = obstacle.position[2] - fallbackPosition[2];
-              const distance = Math.sqrt(dx * dx + dz * dz);
-              const minClearance = obstacle.size * 2.5 + 7;
-              if (distance < minClearance) {
-                fallbackClear = false;
-                break;
-              }
-            }
-            if (!fallbackClear) {
-              fallbackPosition = [safeZoneCenter[0], 0.5, safeZoneCenter[1]];
-              debug.warn(
-                `Fallback ${type} position near center also obstructed. Placing AT center.`
-              );
-            }
-            finalPosition = fallbackPosition; // Assign final fallback position
-          }
-          // If not max attempts yet, loop continues, finalPosition remains null
         }
       } else {
-        // Not a turret/tank or safe zone inactive, the candidate position is final (if clear)
         finalPosition = candidatePosition;
+      }
+
+      // Fallback to center after max attempts
+      if (finalPosition === null && attempts >= turretMaxRegenAttempts) {
+        debug.warn(
+          `${type} spawn failed after ${attempts} attempts. Using center fallback.`
+        );
+        finalPosition = [safeZoneCenter[0], 0.5, safeZoneCenter[1]];
       }
     }
 

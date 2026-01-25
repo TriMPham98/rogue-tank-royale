@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { useGameState } from "../utils/gameState";
+import { useGameState, Enemy } from "../utils/gameState";
 import { generateRandomPosition } from "../utils/levelGenerator";
 import { debug } from "../utils/debug";
 import * as THREE from "three"; // Import THREE for Vector2
@@ -61,7 +61,7 @@ const generateVariedSpawnPosition = (
 
     // Generate position based on spawn zone
     switch (spawnZone) {
-      case "edge":
+      case "edge": {
         // Edge spawn with some randomness
         const edge = Math.random() < 0.5 ? "north" : "south";
         const edgeOffset = Math.random() * 20 + 10; // 10-30 units from edge
@@ -71,13 +71,15 @@ const generateVariedSpawnPosition = (
             ? halfMapSize - edgeOffset
             : -halfMapSize + edgeOffset;
         break;
-      case "mid":
+      }
+      case "mid": {
         // Mid area spawn with tighter bounds
         const midRange = halfMapSize * 0.4;
         x = (Math.random() - 0.5) * midRange;
         z = (Math.random() - 0.5) * midRange;
         break;
-      default:
+      }
+      default: {
         // Anywhere spawn with level-based distribution
         const distribution = Math.random();
         if (distribution < 0.4) {
@@ -94,6 +96,7 @@ const generateVariedSpawnPosition = (
           x = (Math.random() - 0.5) * baseGridSize;
           z = (Math.random() - 0.5) * baseGridSize;
         }
+      }
     }
 
     const position: [number, number, number] = [x, 0.5, z];
@@ -215,92 +218,104 @@ export const useRespawnManager = () => {
         let positionFound = false;
         const existingPositions = [
           playerTankPosition,
-          ...enemies.map((e: any) => e.position),
+          ...enemies.map((e: Enemy) => e.position),
         ];
 
+        // For tanks/turrets with active safe zone, generate positions inside the zone directly
+        const shouldSpawnInSafeZone =
+          (type === "turret" || type === "tank") && safeZoneActive;
+
         while (attempts < turretMaxRegenAttempts && !positionFound) {
-          position = generateVariedSpawnPosition(
-            level,
-            existingPositions,
-            7,
-            400,
-            type
-          );
+          // Generate position based on whether we need to be in safe zone
+          if (shouldSpawnInSafeZone) {
+            // Generate position directly inside safe zone for better success rate
+            const angle = Math.random() * Math.PI * 2;
+            // Use 90% of safe zone radius to ensure we're comfortably inside
+            const radius = Math.random() * safeZoneRadius * 0.9;
+            position = [
+              safeZoneCenter[0] + Math.cos(angle) * radius,
+              0.5,
+              safeZoneCenter[1] + Math.sin(angle) * radius,
+            ];
+            position = enforceMapBoundaries(position);
+          } else {
+            position = generateVariedSpawnPosition(
+              level,
+              existingPositions,
+              7,
+              400,
+              type
+            );
+          }
 
           // Extra validation for distance from terrain obstacles
+          // Use reduced clearance for small safe zones to allow spawning
+          const baseClearance = shouldSpawnInSafeZone && safeZoneRadius < 15
+            ? Math.max(3, safeZoneRadius * 0.3) // Reduced clearance for tiny zones
+            : 7;
           let isClear = true;
           for (const obstacle of terrainObstacles) {
             const dx = obstacle.position[0] - position[0];
             const dz = obstacle.position[2] - position[2];
             const distance = Math.sqrt(dx * dx + dz * dz);
-            const minClearance = obstacle.size * 2.5 + 7;
+            const minClearance = obstacle.size * 2.5 + baseClearance;
             if (distance < minClearance) {
               isClear = false;
-              debug.warn(
-                "Respawn rejected spawn position too close to obstacle:",
-                position
-              );
+              if (SPAWN_STATS_DEBUG) {
+                debug.warn(
+                  "Respawn rejected spawn position too close to obstacle:",
+                  position
+                );
+              }
               break;
             }
           }
+
+          // Check distance from existing enemies/player
+          if (isClear) {
+            for (const existingPos of existingPositions) {
+              const dx = existingPos[0] - position[0];
+              const dz = existingPos[2] - position[2];
+              const distance = Math.sqrt(dx * dx + dz * dz);
+              if (distance < 5) {
+                isClear = false;
+                break;
+              }
+            }
+          }
+
           if (!isClear) {
             attempts++;
             continue;
           }
 
-          // Check safe zone if it's a turret
-          if ((type === "turret" || type === "tank") && safeZoneActive) {
-            const turretPosVec = new THREE.Vector2(position[0], position[2]);
+          // For safe zone spawns, verify we're actually inside
+          if (shouldSpawnInSafeZone) {
+            const posVec = new THREE.Vector2(position[0], position[2]);
             const centerVec = new THREE.Vector2(
               safeZoneCenter[0],
               safeZoneCenter[1]
             );
-            const distanceToCenter = turretPosVec.distanceTo(centerVec);
+            const distanceToCenter = posVec.distanceTo(centerVec);
 
             if (distanceToCenter <= safeZoneRadius) {
-              positionFound = true; // Position is valid
+              positionFound = true;
             } else {
-              // Position is outside the safe zone, try again
               attempts++;
-              if (attempts >= turretMaxRegenAttempts) {
-                debug.warn(
-                  `${type} RESPAWN failed after ${attempts} attempts to find position in safe zone. Placing near center.`
-                );
-                // Fallback logic similar to generateEnemies
-                const angle = Math.random() * Math.PI * 2;
-                const radiusOffset = Math.min(safeZoneRadius * 0.8, 5);
-                position = [
-                  safeZoneCenter[0] + Math.cos(angle) * radiusOffset,
-                  0.5,
-                  safeZoneCenter[1] + Math.sin(angle) * radiusOffset,
-                ];
-                // Apply map boundaries to the fallback position
-                position = enforceMapBoundaries(position);
-
-                // Basic check for fallback position
-                let fallbackClear = true;
-                for (const obstacle of terrainObstacles) {
-                  const dx = obstacle.position[0] - position[0];
-                  const dz = obstacle.position[2] - position[2];
-                  if (Math.sqrt(dx * dx + dz * dz) < obstacle.size + 3) {
-                    fallbackClear = false;
-                    break;
-                  }
-                }
-                if (!fallbackClear) {
-                  position = [safeZoneCenter[0], 0.5, safeZoneCenter[1]];
-                  // Apply map boundaries to the center position as well
-                  position = enforceMapBoundaries(position);
-                  debug.warn(
-                    `Fallback ${type} RESPAWN position also obstructed. Placing AT center.`
-                  );
-                }
-                positionFound = true; // Use the fallback position
-              }
-              // Loop continues to regenerate position
             }
           } else {
-            // Not a turret/tank or safe zone inactive, position is fine
+            // Bombers and non-safe-zone spawns don't need zone check
+            positionFound = true;
+          }
+
+          // If we've exhausted attempts for safe zone spawns, use fallback
+          if (!positionFound && attempts >= turretMaxRegenAttempts) {
+            debug.warn(
+              `${type} RESPAWN failed after ${attempts} attempts. Using center fallback.`
+            );
+            // Place at safe zone center as last resort
+            position = [safeZoneCenter[0], 0.5, safeZoneCenter[1]];
+            position = enforceMapBoundaries(position);
             positionFound = true;
           }
         }
@@ -365,6 +380,9 @@ export const useRespawnManager = () => {
     }
     isSpawningWaveRef.current = true;
     let spawned = 0;
+    let consecutiveFailures = 0;
+    const maxConsecutiveFailures = 10; // Prevent infinite retry loops
+
     const spawnNext = () => {
       const freshState = useGameState.getState();
       const maxEnemies = getMaxEnemies(freshState.level);
@@ -372,6 +390,7 @@ export const useRespawnManager = () => {
         if (spawnEnemy(maxEnemies)) {
           // Use the boolean return value
           spawned++;
+          consecutiveFailures = 0; // Reset on success
           if (spawned < count) {
             setTimeout(spawnNext, 300); // Stagger spawns slightly
           } else {
@@ -380,6 +399,15 @@ export const useRespawnManager = () => {
               console.log(`[SPAWN STATS] Wave spawn of ${count} finished.`);
           }
         } else {
+          consecutiveFailures++;
+          if (consecutiveFailures >= maxConsecutiveFailures) {
+            // Give up after too many failures to prevent infinite loop
+            debug.warn(
+              `Wave spawn giving up after ${consecutiveFailures} consecutive failures. Spawned ${spawned}/${count}.`
+            );
+            isSpawningWaveRef.current = false;
+            return;
+          }
           // If spawn failed (e.g., couldn't find position), try again shortly
           debug.warn("Spawn attempt failed during wave, retrying...");
           setTimeout(spawnNext, 500); // Longer delay on failure retry
@@ -576,6 +604,7 @@ export const useRespawnManager = () => {
     });
 
     return unsubscribe;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Empty dependency array ensures this runs only once on mount
 
   return null; // This hook doesn't render anything
