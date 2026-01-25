@@ -1,10 +1,11 @@
-import { useRef, useState, useEffect, useCallback } from "react";
+import { useRef, useState, useEffect, useCallback, useMemo } from "react";
 import { useFrame } from "@react-three/fiber";
 import { Box, Cylinder, Sphere } from "@react-three/drei";
 import { Vector3, Group, Quaternion, MeshStandardMaterial } from "three";
 import { Enemy, useGameState } from "../utils/gameState";
 import Projectile from "./Projectile";
 import { debug } from "../utils/debug";
+import { GAME_CONSTANTS } from "../constants/game";
 
 interface EnemyTankProps {
   enemy: Enemy;
@@ -19,6 +20,24 @@ const EnemyTank = ({ enemy }: EnemyTankProps) => {
   const tankRotationRef = useRef(0);
   const turretRotationRef = useRef(0);
   const lastShootTimeRef = useRef(0);
+
+  // Memoized Vector3 objects to avoid creating new ones every frame
+  const tempVectors = useMemo(() => ({
+    playerPos: new Vector3(),
+    directionToPlayer: new Vector3(),
+    tankPos: new Vector3(),
+    obstaclePos: new Vector3(),
+    vectorToTank: new Vector3(),
+    attractiveForce: new Vector3(),
+    sumRepulsive: new Vector3(),
+    netForce: new Vector3(),
+    targetDirection: new Vector3(),
+    moveDirection: new Vector3(),
+    barrelEndLocal: new Vector3(),
+    barrelEndWorld: new Vector3(),
+    shootDirection: new Vector3(),
+  }), []);
+  const tempQuat = useMemo(() => new Quaternion(), []);
 
   const [healthPercent, setHealthPercent] = useState(1);
   const [projectiles, setProjectiles] = useState<
@@ -37,21 +56,27 @@ const EnemyTank = ({ enemy }: EnemyTankProps) => {
 
   const isBomber = enemy.type === "bomber";
   const isTank = enemy.type === "tank";
-  const tankRadius = isBomber ? 1.2 : 1.25;
-  const moveSpeed = enemy.speed || (isBomber ? 2.5 : 1.5);
+  const tankRadius = isBomber ? GAME_CONSTANTS.BOMBER_RADIUS : GAME_CONSTANTS.TANK_RADIUS;
+  const moveSpeed = enemy.speed || (isBomber ? GAME_CONSTANTS.ENEMY_BOMBER_BASE_SPEED : GAME_CONSTANTS.ENEMY_TANK_BASE_SPEED);
 
   useEffect(() => {
     maxHealthRef.current = enemy.health;
   }, []);
 
+  // Memoized vectors for collision checking
+  const collisionVectors = useMemo(() => ({
+    tankPosition: new Vector3(),
+    obstaclePos: new Vector3(),
+  }), []);
+
   const checkTerrainCollision = useCallback(
     (newX: number, newZ: number): boolean => {
-      const mapSize = 50;
-      if (Math.abs(newX) > mapSize - 1 || Math.abs(newZ) > mapSize - 1) {
+      const mapBoundary = GAME_CONSTANTS.HALF_MAP_SIZE - 1;
+      if (Math.abs(newX) > mapBoundary || Math.abs(newZ) > mapBoundary) {
         return true;
       }
 
-      const tankPosition = new Vector3(newX, 0, newZ);
+      collisionVectors.tankPosition.set(newX, 0, newZ);
       const terrainObstacles = getState().terrainObstacles;
 
       // If there are no terrain obstacles, don't block movement
@@ -62,13 +87,13 @@ const EnemyTank = ({ enemy }: EnemyTankProps) => {
       // Check collision with terrain obstacles
       for (const obstacle of terrainObstacles) {
         if (obstacle.type === "rock") {
-          const obstaclePos = new Vector3(
+          collisionVectors.obstaclePos.set(
             obstacle.position[0],
             0,
             obstacle.position[2]
           );
-          const distance = obstaclePos.distanceTo(tankPosition);
-          const obstacleRadius = obstacle.size * 0.75;
+          const distance = collisionVectors.obstaclePos.distanceTo(collisionVectors.tankPosition);
+          const obstacleRadius = obstacle.size * GAME_CONSTANTS.OBSTACLE_RADIUS_MULTIPLIER;
 
           // Small safety margin added to prevent getting too close
           const safetyMargin = 0.1;
@@ -87,13 +112,13 @@ const EnemyTank = ({ enemy }: EnemyTankProps) => {
 
         // Only check for turrets
         if (otherEnemy.type === "turret") {
-          const turretPos = new Vector3(
+          collisionVectors.obstaclePos.set(
             otherEnemy.position[0],
             0,
             otherEnemy.position[2]
           );
-          const distance = turretPos.distanceTo(tankPosition);
-          const turretRadius = 1.5; // Blue turret collision radius
+          const distance = collisionVectors.obstaclePos.distanceTo(collisionVectors.tankPosition);
+          const turretRadius = GAME_CONSTANTS.TURRET_COLLISION_RADIUS;
           const safetyMargin = 0.2;
 
           if (distance < tankRadius + turretRadius + safetyMargin) {
@@ -104,7 +129,7 @@ const EnemyTank = ({ enemy }: EnemyTankProps) => {
 
       return false;
     },
-    [tankRadius, getState, enemy.id]
+    [tankRadius, getState, enemy.id, collisionVectors]
   );
 
   useFrame((state, delta) => {
@@ -128,21 +153,21 @@ const EnemyTank = ({ enemy }: EnemyTankProps) => {
     }
 
     const currentPositionVec = tankRef.current.position;
-    const playerPositionVec = new Vector3(...playerTankPosition);
+    tempVectors.playerPos.set(playerTankPosition[0], playerTankPosition[1], playerTankPosition[2]);
 
-    const directionToPlayer = playerPositionVec
-      .clone()
+    tempVectors.directionToPlayer
+      .copy(tempVectors.playerPos)
       .sub(currentPositionVec)
       .setY(0)
       .normalize();
 
-    const distanceToPlayer = currentPositionVec.distanceTo(playerPositionVec);
+    const distanceToPlayer = currentPositionVec.distanceTo(tempVectors.playerPos);
 
     // --- Turret Rotation (Non-Bombers) ---
     if (!isBomber && turretRef.current) {
       const targetTurretRotation = Math.atan2(
-        directionToPlayer.x,
-        directionToPlayer.z
+        tempVectors.directionToPlayer.x,
+        tempVectors.directionToPlayer.z
       );
       const relativeRotation = targetTurretRotation - tankRotationRef.current;
       const turretRotationDiff = relativeRotation - turretRotationRef.current;
@@ -154,33 +179,29 @@ const EnemyTank = ({ enemy }: EnemyTankProps) => {
 
     // --- Shooting (Non-Bombers) ---
     if (!isBomber && turretRef.current) {
-      const shootingRange = isTank ? 20 : 25;
-      const fireRate = isTank ? 5.0 : 6.0;
+      const shootingRange = isTank ? GAME_CONSTANTS.ENEMY_TANK_SHOOTING_RANGE : GAME_CONSTANTS.ENEMY_TURRET_SHOOTING_RANGE;
+      const fireRate = isTank ? GAME_CONSTANTS.ENEMY_TANK_FIRE_RATE : GAME_CONSTANTS.ENEMY_TURRET_FIRE_RATE;
 
       if (distanceToPlayer < shootingRange) {
         const timeSinceLastShot =
           state.clock.getElapsedTime() - lastShootTimeRef.current;
         if (timeSinceLastShot > fireRate) {
           const barrelEndLocalZ = isTank ? 1.75 : 2.2;
-          const barrelEndLocal = new Vector3(0, 0.2, barrelEndLocalZ);
-          const barrelEndWorld = turretRef.current.localToWorld(
-            barrelEndLocal.clone()
-          );
+          tempVectors.barrelEndLocal.set(0, 0.2, barrelEndLocalZ);
+          tempVectors.barrelEndWorld.copy(tempVectors.barrelEndLocal);
+          turretRef.current.localToWorld(tempVectors.barrelEndWorld);
 
           const shootPosition: [number, number, number] = [
-            barrelEndWorld.x,
-            barrelEndWorld.y,
-            barrelEndWorld.z,
+            tempVectors.barrelEndWorld.x,
+            tempVectors.barrelEndWorld.y,
+            tempVectors.barrelEndWorld.z,
           ];
 
-          const worldQuaternion = new Quaternion();
-          turretRef.current.getWorldQuaternion(worldQuaternion);
-          const shootDirection = new Vector3(0, 0, 1).applyQuaternion(
-            worldQuaternion
-          );
+          turretRef.current.getWorldQuaternion(tempQuat);
+          tempVectors.shootDirection.set(0, 0, 1).applyQuaternion(tempQuat);
           const projectileRotation = Math.atan2(
-            shootDirection.x,
-            shootDirection.z
+            tempVectors.shootDirection.x,
+            tempVectors.shootDirection.z
           );
 
           setProjectiles((prev) => [
@@ -200,7 +221,7 @@ const EnemyTank = ({ enemy }: EnemyTankProps) => {
 
     // --- Movement and Body Rotation (Tank & Bomber) ---
     if (isTank || isBomber) {
-      const turnRate = isBomber ? 2.0 : 1.0;
+      const turnRate = isBomber ? GAME_CONSTANTS.ENEMY_BOMBER_TURN_RATE : GAME_CONSTANTS.ENEMY_TANK_TURN_RATE;
 
       // Potential Field Parameters
       const max_distance = 5;
@@ -208,31 +229,29 @@ const EnemyTank = ({ enemy }: EnemyTankProps) => {
       const epsilon = 0.1;
 
       // Compute attractive force towards player
-      const attractiveForce = directionToPlayer
-        .clone()
+      tempVectors.attractiveForce
+        .copy(tempVectors.directionToPlayer)
         .multiplyScalar(attraction_strength);
 
       // Compute sum of repulsive forces from obstacles
-      const sumRepulsive = new Vector3(0, 0, 0);
+      tempVectors.sumRepulsive.set(0, 0, 0);
       const terrainObstacles = getState().terrainObstacles;
 
       // Add repulsion from terrain obstacles
       for (const obstacle of terrainObstacles) {
-        const obstaclePos = new Vector3(
+        tempVectors.obstaclePos.set(
           obstacle.position[0],
           0,
           obstacle.position[2]
         );
-        const vectorToTank = currentPositionVec.clone().sub(obstaclePos);
-        const distance = vectorToTank.length();
-        const obstacleRadius = obstacle.size * 0.75;
+        tempVectors.vectorToTank.copy(currentPositionVec).sub(tempVectors.obstaclePos);
+        const distance = tempVectors.vectorToTank.length();
+        const obstacleRadius = obstacle.size * GAME_CONSTANTS.OBSTACLE_RADIUS_MULTIPLIER;
         const effectiveDistance = distance - (tankRadius + obstacleRadius);
         if (effectiveDistance < max_distance) {
-          const repulsiveDirection = vectorToTank.normalize();
           const repulsiveMagnitude = 1 / (effectiveDistance + epsilon);
-          const repulsiveForce =
-            repulsiveDirection.multiplyScalar(repulsiveMagnitude);
-          sumRepulsive.add(repulsiveForce);
+          tempVectors.vectorToTank.normalize().multiplyScalar(repulsiveMagnitude);
+          tempVectors.sumRepulsive.add(tempVectors.vectorToTank);
         }
       }
 
@@ -243,37 +262,36 @@ const EnemyTank = ({ enemy }: EnemyTankProps) => {
 
         // Only consider turrets as obstacles
         if (otherEnemy.type === "turret") {
-          const turretPos = new Vector3(
+          tempVectors.obstaclePos.set(
             otherEnemy.position[0],
             0,
             otherEnemy.position[2]
           );
-          const vectorToTank = currentPositionVec.clone().sub(turretPos);
-          const distance = vectorToTank.length();
-          const turretRadius = 1.5; // Blue turret collision radius
+          tempVectors.vectorToTank.copy(currentPositionVec).sub(tempVectors.obstaclePos);
+          const distance = tempVectors.vectorToTank.length();
+          const turretRadius = GAME_CONSTANTS.TURRET_COLLISION_RADIUS;
           const effectiveDistance = distance - (tankRadius + turretRadius);
 
           // Apply a stronger repulsion from turrets than from rocks
           if (effectiveDistance < max_distance) {
-            const repulsiveDirection = vectorToTank.normalize();
             // Use a stronger magnitude for turrets
             const repulsiveMagnitude = 1.5 / (effectiveDistance + epsilon);
-            const repulsiveForce =
-              repulsiveDirection.multiplyScalar(repulsiveMagnitude);
-            sumRepulsive.add(repulsiveForce);
+            tempVectors.vectorToTank.normalize().multiplyScalar(repulsiveMagnitude);
+            tempVectors.sumRepulsive.add(tempVectors.vectorToTank);
           }
         }
       }
 
       // Compute net force
-      const netForce = attractiveForce.clone().add(sumRepulsive);
+      tempVectors.netForce.copy(tempVectors.attractiveForce).add(tempVectors.sumRepulsive);
 
       // Determine target direction
-      const targetDirection =
-        netForce.length() > 0 ? netForce.normalize() : directionToPlayer;
+      tempVectors.targetDirection.copy(
+        tempVectors.netForce.length() > 0 ? tempVectors.netForce.normalize() : tempVectors.directionToPlayer
+      );
 
       // Set target rotation
-      const targetRotation = Math.atan2(targetDirection.x, targetDirection.z);
+      const targetRotation = Math.atan2(tempVectors.targetDirection.x, tempVectors.targetDirection.z);
 
       // Smoothly turn towards target rotation
       const rotationDiff = targetRotation - tankRotationRef.current;
@@ -290,15 +308,15 @@ const EnemyTank = ({ enemy }: EnemyTankProps) => {
       }
 
       if (shouldMove) {
-        const moveDirection = new Vector3(
+        tempVectors.moveDirection.set(
           Math.sin(tankRotationRef.current),
           0,
           Math.cos(tankRotationRef.current)
         );
         const potentialX =
-          currentPositionVec.x + moveDirection.x * delta * moveSpeed;
+          currentPositionVec.x + tempVectors.moveDirection.x * delta * moveSpeed;
         const potentialZ =
-          currentPositionVec.z + moveDirection.z * delta * moveSpeed;
+          currentPositionVec.z + tempVectors.moveDirection.z * delta * moveSpeed;
 
         if (!checkTerrainCollision(potentialX, potentialZ)) {
           tankRef.current.position.x = potentialX;
@@ -320,10 +338,10 @@ const EnemyTank = ({ enemy }: EnemyTankProps) => {
         }
       }
 
-      if (isBomber && distanceToPlayer < 2) {
+      if (isBomber && distanceToPlayer < GAME_CONSTANTS.BOMBER_EXPLOSION_RANGE) {
         debug.log(`Bomber ${enemy.id} exploded on player!`);
         const takeDamage = getState().takeDamage;
-        takeDamage(25);
+        takeDamage(GAME_CONSTANTS.BOMBER_EXPLOSION_DAMAGE);
         damageEnemy(enemy.id, 1000);
       }
     }

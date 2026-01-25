@@ -17,12 +17,14 @@ import {
   useState,
 } from "react";
 import { useGameState } from "../utils/gameState";
+import { shallow } from "zustand/shallow";
 import { Vector3, SpotLight as ThreeSpotLight, PerspectiveCamera } from "three";
 import "./GameScene.css";
 import { useRespawnManager } from "../utils/respawnManager";
 import { debug } from "../utils/debug";
 import { globalFPSTracker } from "../utils/fpsTracker";
 import MobileJoysticks from "../components/MobileJoysticks";
+import { GAME_CONSTANTS } from "../constants/game";
 
 // Custom hook to calculate light intensity based on game level
 const useLightIntensity = () => {
@@ -155,12 +157,12 @@ const FollowCamera = memo(() => {
   // Add state to track the camera animation
   const [isIntroPanComplete, setIsIntroPanComplete] = useState(false);
   const introPanTimeRef = useRef(0);
-  const introPanDuration = 5.0; // 5 seconds for the intro pan
+  const introPanDuration = GAME_CONSTANTS.INTRO_PAN_DURATION;
 
   // Initial dramatic offset values (higher and farther away)
-  const initialHeight = 40;
-  const initialDistance = 60;
-  const initialFov = 50; // Narrower field of view for dramatic effect
+  const initialHeight = GAME_CONSTANTS.INTRO_CAMERA_HEIGHT;
+  const initialDistance = GAME_CONSTANTS.INTRO_CAMERA_DISTANCE;
+  const initialFov = GAME_CONSTANTS.INTRO_CAMERA_FOV;
 
   // Store animation state in a ref to prevent issues with state updates
   const animationStateRef = useRef({
@@ -401,7 +403,7 @@ const IntroSpotlight = () => {
   const spotLightRef = useRef<ThreeSpotLight>(null);
   const [isIntroDone, setIsIntroDone] = useState(false);
   const timeRef = useRef(0);
-  const introDuration = 5.0; // Match the camera pan duration
+  const introDuration = GAME_CONSTANTS.INTRO_PAN_DURATION;
 
   useEffect(() => {
     // Watch for changes to the shouldResetCameraAnimation flag
@@ -465,7 +467,6 @@ const IntroSpotlight = () => {
 };
 
 const SceneContent = memo((): JSX.Element => {
-  const getState = useRef(useGameState.getState).current;
   const {
     ambientIntensity,
     ambientR,
@@ -476,27 +477,12 @@ const SceneContent = memo((): JSX.Element => {
     rayleigh,
     sunAzimuth,
   } = useLightIntensity();
-  const [enemies, setEnemies] = useState(getState().enemies);
-  const [terrainObstacles, setTerrainObstacles] = useState(
-    getState().terrainObstacles
-  );
-  const [isFirstPersonView, setIsFirstPersonView] = useState(
-    getState().isFirstPersonView
-  );
 
-  useEffect(() => {
-    const unsubscribe = useGameState.subscribe((state) => {
-      if (state.enemies !== enemies) {
-        setEnemies(state.enemies);
-      }
-      if (state.terrainObstacles !== terrainObstacles) {
-        setTerrainObstacles(state.terrainObstacles);
-      }
-      setIsFirstPersonView(state.isFirstPersonView);
-    });
-
-    return unsubscribe;
-  }, [enemies, terrainObstacles]);
+  // Optimized: Use shallow selectors instead of manual subscriptions
+  const enemies = useGameState((state) => state.enemies, shallow);
+  const terrainObstacles = useGameState((state) => state.terrainObstacles, shallow);
+  const isFirstPersonView = useGameState((state) => state.isFirstPersonView);
+  const powerUps = useGameState((state) => state.powerUps, shallow);
 
   return (
     <Suspense fallback={null}>
@@ -525,7 +511,7 @@ const SceneContent = memo((): JSX.Element => {
       {enemies.map((enemy) => (
         <EnemyTank key={`enemy-${enemy.id}`} enemy={enemy} />
       ))}
-      {getState().powerUps.map((powerUp) => (
+      {powerUps.map((powerUp) => (
         <PowerUpItem key={`powerup-${powerUp.id}`} powerUp={powerUp} />
       ))}
       {terrainObstacles.map((obstacle) => (
@@ -565,10 +551,10 @@ const TerrainObstacleGenerator = () => {
     const startGenerationTime = performance.now();
     requestAnimationFrame(() => {
       try {
-        const obstacleCount = 20;
-        const spawnClearanceRadius = 15;
+        const obstacleCount = GAME_CONSTANTS.DEFAULT_OBSTACLE_COUNT;
+        const spawnClearanceRadius = GAME_CONSTANTS.SPAWN_CLEARANCE_RADIUS;
         let totalAttempts = 0;
-        const maxAttempts = 500;
+        const maxAttempts = GAME_CONSTANTS.MAX_SPAWN_ATTEMPTS;
         const generatedObstacles: Array<{
           // Define local array type
           id: string;
@@ -593,7 +579,7 @@ const TerrainObstacleGenerator = () => {
           const size = 1 + Math.random() * 1.2;
           // Check against the locally generated obstacles in this run
           let isTooClose = false;
-          const minObstacleSpacing = 8;
+          const minObstacleSpacing = GAME_CONSTANTS.MIN_OBSTACLE_SPACING;
 
           for (const existing of generatedObstacles) {
             const dx = existing.position[0] - x;

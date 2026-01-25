@@ -5,7 +5,7 @@ import React, {
   useCallback,
   useMemo,
 } from "react";
-import { WeaponSelectionProps, SecondaryWeapon } from "../types";
+import { WeaponSelectionProps, SecondaryWeapon } from "../types/index";
 import { useGameState } from "../utils/gameState";
 import { calculateEnhancedWeaponRange } from "../utils/tankStats";
 

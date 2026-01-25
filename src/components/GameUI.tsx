@@ -1,6 +1,5 @@
-import { useGameState } from "../utils/gameState";
+import { useGameState, UpgradeableStat, SecondaryWeapon } from "../utils/gameState";
 import "./GameUI.css";
-import { UpgradeableStat } from "../utils/gameState";
 import { useState, useCallback, useEffect, useRef } from "react";
 import WeaponSelection from "./WeaponSelection";
 import "./WeaponSelection.css";
@@ -215,7 +214,7 @@ const GameUI = () => {
 
     return (
       <WeaponSelection
-        onWeaponSelect={(weapon) => {
+        onWeaponSelect={(weapon: SecondaryWeapon) => {
           selectWeapon(weapon);
           closeWeaponSelection();
           if (rank <= 50) {

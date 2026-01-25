@@ -1,54 +1,25 @@
 import { create } from "zustand";
 import { availableWeapons } from "./weapons";
 import SoundManager from "./sound";
+import { GAME_CONSTANTS } from "../constants/game";
 
-// Define the type for an enemy
-export interface Enemy {
-  id: string;
-  position: [number, number, number];
-  health: number;
-  type: "tank" | "turret" | "bomber";
-  speed?: number; // Speed multiplier for movement
-}
+// Re-export types from central types location for backward compatibility
+export type {
+  Enemy,
+  PowerUp,
+  SecondaryWeapon,
+  UpgradeableStat,
+  ObstacleData,
+} from "../types/index";
 
-// Define the type for a power-up
-export interface PowerUp {
-  id: string;
-  position: [number, number, number];
-  type: "health" | "coin";
-  value?: number; // Used for coins
-}
-
-// Define available stats for upgrades
-export type UpgradeableStat =
-  | "tankSpeed"
-  | "fireRate"
-  | "cameraRange"
-  | "maxHealth"
-  | "healthRegen"
-  | "turretDamage"
-  | "bulletVelocity"
-  | "penetration";
-
-// Define the type for a secondary weapon
-export interface SecondaryWeapon {
-  id: string; // Weapon type ID (e.g., "rocket", "laser", etc.)
-  instanceId?: string; // New field to track individual weapon instances
-  name: string;
-  description: string;
-  damage: number;
-  cooldown: number;
-  range: number;
-  projectileSpeed: number;
-}
-
-// Define the type for terrain obstacles
-interface ObstacleData {
-  id: string;
-  position: [number, number, number];
-  type: "rock";
-  size: number;
-}
+// Import types for internal use
+import type {
+  Enemy,
+  PowerUp,
+  SecondaryWeapon,
+  UpgradeableStat,
+  ObstacleData,
+} from "../types/index";
 
 // Define the game state
 interface GameState {
@@ -161,29 +132,29 @@ interface GameState {
 // Create the game state store
 export const useGameState = create<GameState>((set, get) => ({
   // Initial player stats
-  playerHealth: 100,
-  playerMaxHealth: 100,
-  playerSpeed: 3,
+  playerHealth: GAME_CONSTANTS.PLAYER_INITIAL_HEALTH,
+  playerMaxHealth: GAME_CONSTANTS.PLAYER_INITIAL_HEALTH,
+  playerSpeed: GAME_CONSTANTS.PLAYER_INITIAL_SPEED,
   playerDamage: 25,
-  playerTurretDamage: 50, // Keep consistent at 50
-  playerFireRate: 2, // 0.5 shots per second (2 seconds between shots)
-  playerCameraRange: 8, // Default camera distance
+  playerTurretDamage: GAME_CONSTANTS.PLAYER_INITIAL_TURRET_DAMAGE,
+  playerFireRate: GAME_CONSTANTS.PLAYER_INITIAL_FIRE_RATE,
+  playerCameraRange: GAME_CONSTANTS.PLAYER_INITIAL_CAMERA_RANGE,
   playerHealthRegen: 0, // No health regen at start
-  playerBulletVelocity: 15, // Initial bullet velocity
+  playerBulletVelocity: GAME_CONSTANTS.PLAYER_INITIAL_BULLET_VELOCITY,
   playerPenetration: 0, // No penetration at start
   playerLevel: 1, // Initial player level
   score: 0,
   coins: 0,
   level: 1,
   enemiesDefeated: 0,
-  enemiesRequiredForNextLevel: 1, // Changed: Initial threshold - level 1 only needs 1 enemy
+  enemiesRequiredForNextLevel: 1, // Initial threshold - level 1 only needs 1 enemy
 
   // Safe zone (PUBG-like circle)
-  safeZoneRadius: 50, // Initial radius covers the whole map
+  safeZoneRadius: GAME_CONSTANTS.SAFE_ZONE_INITIAL_RADIUS,
   safeZoneCenter: [0, 0], // Center of the map
-  safeZoneTargetRadius: 50, // Target radius for shrinking
-  safeZoneShrinkRate: 0.05, // Increased from 0.035 to 0.05 for faster shrinking
-  safeZoneDamage: 1, // Damage per second outside the safe zone
+  safeZoneTargetRadius: GAME_CONSTANTS.SAFE_ZONE_INITIAL_RADIUS,
+  safeZoneShrinkRate: GAME_CONSTANTS.SAFE_ZONE_DEFAULT_SHRINK_RATE,
+  safeZoneDamage: GAME_CONSTANTS.SAFE_ZONE_BASE_DAMAGE,
   safeZoneActive: false, // Safe zone not active initially
   isPreZoneChangeLevel: false, // Initial value
 
@@ -253,17 +224,17 @@ export const useGameState = create<GameState>((set, get) => ({
 
   spawnEnemy: (enemy) =>
     set((state) => {
-      // If this is a turret, check if we already have 3 turrets
+      // If this is a turret, check if we already have max turrets
       if (enemy.type === "turret") {
         const currentTurrets = state.enemies.filter(
           (e) => e.type === "turret"
         ).length;
-        if (currentTurrets >= 3) {
+        if (currentTurrets >= GAME_CONSTANTS.MAX_TURRETS) {
           // Change this enemy to a tank instead
           enemy.type = "tank";
           // Adjust health and speed to match tank stats
-          const tankBaseHealth = 75;
-          const linearScale = state.level * 9; // Updated to match levelGenerator.ts
+          const tankBaseHealth = GAME_CONSTANTS.ENEMY_TANK_BASE_HEALTH;
+          const linearScale = state.level * GAME_CONSTANTS.ENEMY_HEALTH_SCALE_PER_LEVEL;
           enemy.health = tankBaseHealth + linearScale;
           enemy.speed = 1.3;
         }
@@ -306,7 +277,7 @@ export const useGameState = create<GameState>((set, get) => ({
             ...updates,
             playerHealth: Math.min(
               state.playerMaxHealth,
-              state.playerHealth + 25
+              state.playerHealth + GAME_CONSTANTS.HEALTH_PACK_HEAL_AMOUNT
             ),
           };
           SoundManager.setVolume("healthPickUp", 0.385);
@@ -335,16 +306,16 @@ export const useGameState = create<GameState>((set, get) => ({
     SoundManager.play("deployTank");
 
     return set({
-      playerHealth: 100,
-      playerMaxHealth: 100,
-      playerSpeed: 3,
+      playerHealth: GAME_CONSTANTS.PLAYER_INITIAL_HEALTH,
+      playerMaxHealth: GAME_CONSTANTS.PLAYER_INITIAL_HEALTH,
+      playerSpeed: GAME_CONSTANTS.PLAYER_INITIAL_SPEED,
       playerDamage: 25,
-      playerTurretDamage: 50, // Keep consistent at 50
-      playerFireRate: 2, // 0.5 shots per second (2 seconds between shots)
-      playerCameraRange: 8,
+      playerTurretDamage: GAME_CONSTANTS.PLAYER_INITIAL_TURRET_DAMAGE,
+      playerFireRate: GAME_CONSTANTS.PLAYER_INITIAL_FIRE_RATE,
+      playerCameraRange: GAME_CONSTANTS.PLAYER_INITIAL_CAMERA_RANGE,
       playerHealthRegen: 0,
-      playerBulletVelocity: 15,
-      playerLevel: 1, // Reset player level
+      playerBulletVelocity: GAME_CONSTANTS.PLAYER_INITIAL_BULLET_VELOCITY,
+      playerLevel: 1,
       score: 0,
       coins: 0,
       level: 1,
@@ -357,24 +328,24 @@ export const useGameState = create<GameState>((set, get) => ({
       enemiesRequiredForNextLevel: 1,
       showUpgradeUI: false,
       availableUpgrades: [],
-      terrainObstacles: [], // Reset on restart
+      terrainObstacles: [],
       showWeaponSelection: false,
       availableWeapons,
       selectedWeapons: [],
-      showOrientationWarning: false, // Reset orientation warning
+      showOrientationWarning: false,
       isFirstPersonView: false,
 
       // Reset safe zone
-      safeZoneRadius: 50,
+      safeZoneRadius: GAME_CONSTANTS.SAFE_ZONE_INITIAL_RADIUS,
       safeZoneCenter: [0, 0],
-      safeZoneTargetRadius: 50,
-      safeZoneShrinkRate: 0.05, // Increased from 0.035 to 0.05 for faster shrinking
-      safeZoneDamage: 1,
+      safeZoneTargetRadius: GAME_CONSTANTS.SAFE_ZONE_INITIAL_RADIUS,
+      safeZoneShrinkRate: GAME_CONSTANTS.SAFE_ZONE_DEFAULT_SHRINK_RATE,
+      safeZoneDamage: GAME_CONSTANTS.SAFE_ZONE_BASE_DAMAGE,
       safeZoneActive: false,
       isPreZoneChangeLevel: false,
       shouldResetCameraAnimation: true,
-      isWireframeAssembled: false, // Reset on restart
-      isTerrainReady: false, // Reset on restart
+      isWireframeAssembled: false,
+      isTerrainReady: false,
     });
   },
 
@@ -450,16 +421,16 @@ export const useGameState = create<GameState>((set, get) => ({
       // Late game (levels 51+): 25+ enemies with steeper scaling
       let nextLevelRequirement;
 
-      if (newLevel <= 24) {
+      if (newLevel <= GAME_CONSTANTS.EARLY_GAME_MAX_LEVEL) {
         // Early game: Linear scaling from 1 to 12
         nextLevelRequirement = Math.ceil(newLevel / 2);
-      } else if (newLevel <= 50) {
+      } else if (newLevel <= GAME_CONSTANTS.MID_GAME_MAX_LEVEL) {
         // Mid game: Linear scaling from 13 to 25
-        nextLevelRequirement = 12 + Math.ceil((newLevel - 24) / 2);
+        nextLevelRequirement = 12 + Math.ceil((newLevel - GAME_CONSTANTS.EARLY_GAME_MAX_LEVEL) / 2);
       } else {
         // Late game: Steeper scaling starting from 25
         const baseRequirement = 25;
-        const lateGameLevel = newLevel - 50;
+        const lateGameLevel = newLevel - GAME_CONSTANTS.MID_GAME_MAX_LEVEL;
         // Fix: Use a more gradual scaling for late game to prevent level jumps
         nextLevelRequirement =
           baseRequirement + Math.ceil(lateGameLevel * 0.75);
@@ -469,7 +440,7 @@ export const useGameState = create<GameState>((set, get) => ({
       let availableUpgrades: UpgradeableStat[] = [];
 
       // Only generate upgrade options if below level 51
-      if (newLevel <= 50) {
+      if (newLevel <= GAME_CONSTANTS.UPGRADE_UI_MAX_LEVEL) {
         let possibleUpgrades: UpgradeableStat[] = [
           "tankSpeed",
           // "cameraRange", // Removed from initial list, handled below
@@ -480,19 +451,19 @@ export const useGameState = create<GameState>((set, get) => ({
           // "penetration" removed from main list to make it rare
         ];
 
-        // Only add fireRate if not maxed out (3.0 shots/sec)
-        if (state.playerFireRate > 0.333) {
+        // Only add fireRate if not maxed out
+        if (state.playerFireRate > 1 / GAME_CONSTANTS.PLAYER_MAX_FIRE_RATE) {
           possibleUpgrades.push("fireRate");
         }
 
-        // Only add cameraRange if not capped at 14m
-        if (state.playerCameraRange < 14) {
+        // Only add cameraRange if not capped
+        if (state.playerCameraRange < GAME_CONSTANTS.PLAYER_MAX_CAMERA_RANGE) {
           possibleUpgrades.push("cameraRange");
         }
 
         // Make penetration a rare upgrade (25% chance to be offered)
-        // Only consider adding penetration if not already at max (3)
-        if (state.playerPenetration < 3 && Math.random() < 0.25) {
+        // Only consider adding penetration if not already at max
+        if (state.playerPenetration < GAME_CONSTANTS.PLAYER_MAX_PENETRATION && Math.random() < 0.25) {
           possibleUpgrades.push("penetration");
         }
 
@@ -505,8 +476,8 @@ export const useGameState = create<GameState>((set, get) => ({
       // Calculate main turret damage to be slightly below enemy tank health
       // Tank health scales at level * 9 rate (linear scaling)
       // We'll keep turret damage at around 70% of a tank's health
-      const tankBaseHealth = 75;
-      const linearHealthScale = 9; // From levelGenerator.ts
+      const tankBaseHealth = GAME_CONSTANTS.ENEMY_TANK_BASE_HEALTH;
+      const linearHealthScale = GAME_CONSTANTS.ENEMY_HEALTH_SCALE_PER_LEVEL;
       const tankHealth = tankBaseHealth + newLevel * linearHealthScale;
 
       // Set turret damage to be ~85% of tank health - enough to kill in 2 shots without upgrades
@@ -518,9 +489,9 @@ export const useGameState = create<GameState>((set, get) => ({
         newLevel === 1 ? baseTurretDamage : state.playerTurretDamage;
 
       // Adjust safe zone for the new level
-      const maxRadius = 50;
-      const minRadius = 5; // Reduced from 10 to make the final zone smaller
-      const radiusDecrease = 4; // Decreased from 5 for less aggressive shrinking
+      const maxRadius = GAME_CONSTANTS.SAFE_ZONE_INITIAL_RADIUS;
+      const minRadius = GAME_CONSTANTS.SAFE_ZONE_MIN_RADIUS;
+      const radiusDecrease = GAME_CONSTANTS.SAFE_ZONE_RADIUS_DECREASE_PER_TIER;
 
       // Calculate new target radius for the circle
       // Only reduce the zone every 5 levels
@@ -593,7 +564,7 @@ export const useGameState = create<GameState>((set, get) => ({
         const calculatedShrinkRate = Math.max(0.01, baseShrinkRate);
 
         // Cap the shrink rate at a reasonable maximum to avoid too rapid shrinking
-        const maxShrinkRate = 0.15; // Increased from 0.1 to 0.15 for faster shrinking
+        const maxShrinkRate = GAME_CONSTANTS.SAFE_ZONE_MAX_SHRINK_RATE;
         newShrinkRate = Math.min(maxShrinkRate, calculatedShrinkRate);
       }
 
@@ -606,10 +577,10 @@ export const useGameState = create<GameState>((set, get) => ({
       }
 
       // Only activate the safe zone if we're at level 5 or beyond
-      const shouldActivateSafeZone = newLevel >= 5;
+      const shouldActivateSafeZone = newLevel >= GAME_CONSTANTS.SAFE_ZONE_ACTIVATION_LEVEL;
 
       // Increase damage outside safe zone as levels progress with late game scaling
-      const baseDamage = 1;
+      const baseDamage = GAME_CONSTANTS.SAFE_ZONE_BASE_DAMAGE;
       const damageIncreasePerLevel = 0.5;
       // Only increase damage every 5 levels
       let newSafeZoneDamage =
@@ -629,7 +600,7 @@ export const useGameState = create<GameState>((set, get) => ({
         playerDamage: state.playerDamage + 5, // Linear damage increase of 5 per level
         playerTurretDamage: newTurretDamage,
         enemiesRequiredForNextLevel: nextLevelRequirement,
-        showUpgradeUI: newLevel <= 50, // Only show upgrade UI if level is 50 or below
+        showUpgradeUI: newLevel <= GAME_CONSTANTS.UPGRADE_UI_MAX_LEVEL,
         availableUpgrades, // Set available upgrades
         isPreZoneChangeLevel, // Set the flag for pre-zone change level
 
@@ -715,8 +686,8 @@ export const useGameState = create<GameState>((set, get) => ({
   // New functions for the upgrade system
   upgradeStat: (stat: UpgradeableStat) =>
     set((state) => {
-      // Don't apply upgrades for levels above 50
-      if (state.level > 50) {
+      // Don't apply upgrades for levels above max
+      if (state.level > GAME_CONSTANTS.UPGRADE_UI_MAX_LEVEL) {
         return { showUpgradeUI: false };
       }
 
@@ -728,34 +699,34 @@ export const useGameState = create<GameState>((set, get) => ({
 
       switch (stat) {
         case "tankSpeed":
-          updates.playerSpeed = state.playerSpeed + 0.5; // Linear increase by 0.5
+          updates.playerSpeed = state.playerSpeed + 0.5;
           break;
         case "fireRate":
           // Convert current fire rate to shots per second
           const currentShotsPerSecond = 1 / state.playerFireRate;
           // Add 0.1 shots per second
           const newShotsPerSecond = currentShotsPerSecond + 0.1;
-          // Cap at 3.5 shots per second
-          const cappedShotsPerSecond = Math.min(3.5, newShotsPerSecond);
+          // Cap at max fire rate
+          const cappedShotsPerSecond = Math.min(GAME_CONSTANTS.PLAYER_MAX_FIRE_RATE, newShotsPerSecond);
           // Convert back to time between shots
           const newFireRate = 1 / cappedShotsPerSecond;
           updates.playerFireRate = newFireRate;
           break;
         case "cameraRange":
-          updates.playerCameraRange = state.playerCameraRange + 2; // Linear increase by 2
+          updates.playerCameraRange = state.playerCameraRange + 2;
           break;
         case "maxHealth":
-          updates.playerMaxHealth = state.playerMaxHealth + 25; // Linear increase by 25
+          updates.playerMaxHealth = state.playerMaxHealth + 25;
           // Also heal the player when max health increases
           updates.playerHealth = state.playerHealth + 25;
           break;
         case "healthRegen":
-          updates.playerHealthRegen = state.playerHealthRegen + 0.5; // Linear increase by 0.5
+          updates.playerHealthRegen = state.playerHealthRegen + 0.5;
           break;
         case "turretDamage":
           // Calculate current enemy tank health at player's level
-          const tankBaseHealth = 75;
-          const linearHealthScale = 9; // From levelGenerator.ts
+          const tankBaseHealth = GAME_CONSTANTS.ENEMY_TANK_BASE_HEALTH;
+          const linearHealthScale = GAME_CONSTANTS.ENEMY_HEALTH_SCALE_PER_LEVEL;
           const currentTankHealth =
             tankBaseHealth + state.level * linearHealthScale;
 
@@ -770,11 +741,10 @@ export const useGameState = create<GameState>((set, get) => ({
             state.playerTurretDamage + damageIncrease;
           break;
         case "bulletVelocity":
-          updates.playerBulletVelocity = state.playerBulletVelocity + 2; // Linear increase by 2
+          updates.playerBulletVelocity = state.playerBulletVelocity + 2;
           break;
         case "penetration":
-          // Max value is 3
-          updates.playerPenetration = Math.min(3, state.playerPenetration + 1); // Linear increase by 1, max 3
+          updates.playerPenetration = Math.min(GAME_CONSTANTS.PLAYER_MAX_PENETRATION, state.playerPenetration + 1);
           break;
       }
 
@@ -874,15 +844,15 @@ export const useGameState = create<GameState>((set, get) => ({
   returnToMainMenu: () => {
     // Reset the state similar to restartGame, but also set isGameStarted to false
     set({
-      playerHealth: 100,
-      playerMaxHealth: 100,
-      playerSpeed: 3,
+      playerHealth: GAME_CONSTANTS.PLAYER_INITIAL_HEALTH,
+      playerMaxHealth: GAME_CONSTANTS.PLAYER_INITIAL_HEALTH,
+      playerSpeed: GAME_CONSTANTS.PLAYER_INITIAL_SPEED,
       playerDamage: 25,
-      playerTurretDamage: 50,
-      playerFireRate: 2,
-      playerCameraRange: 8,
+      playerTurretDamage: GAME_CONSTANTS.PLAYER_INITIAL_TURRET_DAMAGE,
+      playerFireRate: GAME_CONSTANTS.PLAYER_INITIAL_FIRE_RATE,
+      playerCameraRange: GAME_CONSTANTS.PLAYER_INITIAL_CAMERA_RANGE,
       playerHealthRegen: 0,
-      playerBulletVelocity: 15,
+      playerBulletVelocity: GAME_CONSTANTS.PLAYER_INITIAL_BULLET_VELOCITY,
       playerPenetration: 0,
       playerLevel: 1,
       score: 0,
@@ -892,8 +862,8 @@ export const useGameState = create<GameState>((set, get) => ({
       enemies: [],
       powerUps: [],
       isGameOver: false,
-      isPaused: false, // Ensure unpaused
-      isGameStarted: false, // Go back to main menu
+      isPaused: false,
+      isGameStarted: false,
       enemiesDefeated: 0,
       enemiesRequiredForNextLevel: 1,
       showUpgradeUI: false,
@@ -902,18 +872,18 @@ export const useGameState = create<GameState>((set, get) => ({
       showWeaponSelection: false,
       availableWeapons,
       selectedWeapons: [],
-      showOrientationWarning: false, // Reset orientation warning
-      safeZoneRadius: 50,
+      showOrientationWarning: false,
+      safeZoneRadius: GAME_CONSTANTS.SAFE_ZONE_INITIAL_RADIUS,
       safeZoneCenter: [0, 0],
-      safeZoneTargetRadius: 50,
-      safeZoneShrinkRate: 0.05,
-      safeZoneDamage: 1,
+      safeZoneTargetRadius: GAME_CONSTANTS.SAFE_ZONE_INITIAL_RADIUS,
+      safeZoneShrinkRate: GAME_CONSTANTS.SAFE_ZONE_DEFAULT_SHRINK_RATE,
+      safeZoneDamage: GAME_CONSTANTS.SAFE_ZONE_BASE_DAMAGE,
       safeZoneActive: false,
       isPreZoneChangeLevel: false,
       shouldResetCameraAnimation: true,
       isWireframeAssembled: false,
       isTerrainReady: false,
-      forward: 0, // Reset input states
+      forward: 0,
       strafe: 0,
       moveX: 0,
       moveZ: 0,
@@ -973,9 +943,8 @@ export const useGameState = create<GameState>((set, get) => ({
 const enforceMapBoundaries = (
   position: [number, number, number]
 ): [number, number, number] => {
-  const mapSize = 100; // Ground plane size
-  const halfMapSize = mapSize / 2;
-  const buffer = 2; // Buffer from edge
+  const halfMapSize = GAME_CONSTANTS.HALF_MAP_SIZE;
+  const buffer = GAME_CONSTANTS.MAP_BOUNDARY_BUFFER;
 
   const constrainedPosition: [number, number, number] = [...position];
 

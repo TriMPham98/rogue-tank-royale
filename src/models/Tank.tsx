@@ -13,15 +13,16 @@ import LaserWeapon from "./LaserWeapon";
 import RocketLauncher from "./RocketLauncher";
 import TeslaCoil from "./TeslaCoil";
 import { WeaponInstance } from "../utils/weapons";
+import { GAME_CONSTANTS } from "../constants/game";
 
 interface TankProps {
   position: [number, number, number];
   isFirstPerson?: boolean;
 }
 
-const SIDE_WEAPON_DISTANCE = 2.75;
-const SIDE_WEAPON_Y_OFFSET = 0.0;
-const MAX_SIDE_WEAPONS = 4;
+const SIDE_WEAPON_DISTANCE = GAME_CONSTANTS.SIDE_WEAPON_DISTANCE;
+const SIDE_WEAPON_Y_OFFSET = GAME_CONSTANTS.SIDE_WEAPON_Y_OFFSET;
+const MAX_SIDE_WEAPONS = GAME_CONSTANTS.MAX_SIDE_WEAPONS;
 
 type WeaponComponentType = React.ComponentType<{
   weaponInstance: WeaponInstance;
@@ -50,6 +51,13 @@ const Tank = ({ position = [0, 0, 0], isFirstPerson = false }: TankProps) => {
   const _quat = useRef(new Quaternion()).current;
   const _euler = useRef(new Euler()).current;
   const prevPovToggleRef = useRef(false);
+
+  // Memoized Vector3 objects to avoid creating new ones every frame
+  const tempVectors = useMemo(() => ({
+    tankPosition: new Vector3(),
+    obstaclePos: new Vector3(),
+    targetQuat: new Quaternion(),
+  }), []);
 
   const [projectiles, setProjectiles] = useState<
     { id: string; position: [number, number, number]; rotation: number }[]
@@ -90,20 +98,20 @@ const Tank = ({ position = [0, 0, 0], isFirstPerson = false }: TankProps) => {
   const sideWeapons = selectedWeapons.slice(0, MAX_SIDE_WEAPONS);
 
   const checkTerrainCollision = (newX: number, newZ: number): boolean => {
-    const mapSize = 50;
-    if (Math.abs(newX) > mapSize - 1 || Math.abs(newZ) > mapSize - 1) {
+    const mapBoundary = GAME_CONSTANTS.HALF_MAP_SIZE - 1;
+    if (Math.abs(newX) > mapBoundary || Math.abs(newZ) > mapBoundary) {
       return true;
     }
-    const tankPosition = new Vector3(newX, 0, newZ);
-    const tankRadius = 1.25;
+    tempVectors.tankPosition.set(newX, 0, newZ);
+    const tankRadius = GAME_CONSTANTS.TANK_RADIUS;
     for (const obstacle of terrainObstacles) {
-      const obstaclePos = new Vector3(
+      tempVectors.obstaclePos.set(
         obstacle.position[0],
         0,
         obstacle.position[2]
       );
-      const distance = obstaclePos.distanceTo(tankPosition);
-      const obstacleRadius = obstacle.size * 0.75;
+      const distance = tempVectors.obstaclePos.distanceTo(tempVectors.tankPosition);
+      const obstacleRadius = obstacle.size * GAME_CONSTANTS.OBSTACLE_RADIUS_MULTIPLIER;
       if (distance < tankRadius + obstacleRadius) {
         return true;
       }
@@ -121,12 +129,15 @@ const Tank = ({ position = [0, 0, 0], isFirstPerson = false }: TankProps) => {
     return () => clearInterval(interval);
   }, [playerHealthRegen, healPlayer, isPaused, isGameOver]);
 
+  // Memoized up vector for rotation
+  const upVector = useMemo(() => new Vector3(0, 1, 0), []);
+
   useEffect(() => {
     if (tankRef.current && !isInitializedRef.current) {
       isInitializedRef.current = true;
       tankRef.current.position.fromArray(position);
       tankRef.current.quaternion.setFromAxisAngle(
-        new Vector3(0, 1, 0),
+        upVector,
         tankRotationRef.current
       );
       const initialPos: [number, number, number] = [
@@ -158,20 +169,17 @@ const Tank = ({ position = [0, 0, 0], isFirstPerson = false }: TankProps) => {
     const currentQuat = tankRef.current.quaternion;
 
     if (keyLeft) {
-      _quat.setFromAxisAngle(new Vector3(0, 1, 0), delta * turnSpeed);
+      _quat.setFromAxisAngle(upVector, delta * turnSpeed);
       currentQuat.multiply(_quat);
     } else if (keyRight) {
-      _quat.setFromAxisAngle(new Vector3(0, 1, 0), -delta * turnSpeed);
+      _quat.setFromAxisAngle(upVector, -delta * turnSpeed);
       currentQuat.multiply(_quat);
     } else if ((moveX !== 0 || moveZ !== 0) && !keyForward && !keyBackward) {
       const targetAngleY = Math.atan2(moveX, moveZ);
-      const targetQuat = _quat.setFromAxisAngle(
-        new Vector3(0, 1, 0),
-        targetAngleY
-      );
+      tempVectors.targetQuat.setFromAxisAngle(upVector, targetAngleY);
 
       const slerpFactor = 1.0 - Math.exp(-turnSpeed * delta * 1.25);
-      currentQuat.slerp(targetQuat, slerpFactor);
+      currentQuat.slerp(tempVectors.targetQuat, slerpFactor);
     }
 
     _euler.setFromQuaternion(currentQuat, "YXZ");
@@ -339,7 +347,8 @@ const Tank = ({ position = [0, 0, 0], isFirstPerson = false }: TankProps) => {
     setProjectiles((prev) => prev.filter((p) => p.id !== id));
   };
 
-  const currentTankPositionVec = new Vector3(...positionRef.current);
+  // Use refs directly to avoid creating new Vector3 on each render
+  const currentTankPosition = positionRef.current;
   const currentTankRotation = tankRotationRef.current;
 
   const renderedSideWeapons = useMemo(() => {
@@ -375,9 +384,9 @@ const Tank = ({ position = [0, 0, 0], isFirstPerson = false }: TankProps) => {
       }
 
       const weaponPosition: [number, number, number] = [
-        currentTankPositionVec.x + offsetX,
-        currentTankPositionVec.y + SIDE_WEAPON_Y_OFFSET,
-        currentTankPositionVec.z + offsetZ,
+        currentTankPosition[0] + offsetX,
+        currentTankPosition[1] + SIDE_WEAPON_Y_OFFSET,
+        currentTankPosition[2] + offsetZ,
       ];
 
       return (
@@ -389,7 +398,7 @@ const Tank = ({ position = [0, 0, 0], isFirstPerson = false }: TankProps) => {
         />
       );
     });
-  }, [sideWeapons]);
+  }, [sideWeapons, currentTankPosition, currentTankRotation]);
 
   return (
     <>

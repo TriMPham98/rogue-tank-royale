@@ -1,17 +1,6 @@
-// Consolidated weapon types and instances
-
-export interface WeaponInstance {
-  id: string;
-  instanceId?: string;
-  name: string;
-  description: string;
-  damage: number;
-  cooldown: number;
-  range: number;
-  projectileSpeed: number;
-}
-
-export type SecondaryWeapon = WeaponInstance;
+// Re-export types from central types location
+export type { SecondaryWeapon, WeaponInstance } from "../types/index";
+import type { SecondaryWeapon } from "../types/index";
 
 export const availableWeapons: SecondaryWeapon[] = [
   {

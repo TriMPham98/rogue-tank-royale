@@ -15,25 +15,9 @@ declare module "../models/Ground" {
   export default Ground;
 }
 
-export interface SecondaryWeapon {
-  id: string;
-  name: string;
-  description: string;
-  damage: number;
-  cooldown: number;
-  range: number;
-  projectileSpeed: number;
-}
-
-export interface WeaponSelectionState {
-  availableWeapons: SecondaryWeapon[];
-  selectedWeapons: SecondaryWeapon[];
-  level: number;
-  canSelect: boolean;
-}
-
-export interface WeaponSelectionProps {
-  onWeaponSelect: (weapon: SecondaryWeapon) => void;
-  onClose: () => void;
-  state: WeaponSelectionState;
-}
+// Re-export types from central types location
+export type {
+  SecondaryWeapon,
+  WeaponSelectionState,
+  WeaponSelectionProps,
+} from "./types/index";
