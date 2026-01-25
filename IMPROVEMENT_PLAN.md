@@ -60,32 +60,39 @@ export const GAME_CONSTANTS = {
 
 ---
 
-## Phase 2: Architecture Refactoring (Medium Effort, High Impact) - NOT STARTED
+## Phase 2: Architecture Refactoring (Medium Effort, High Impact) - COMPLETED
 
-### 2.1 Split `gameState.ts` (997 lines)
-**Create state slices:**
-- `/src/state/playerState.ts` - Health, stats, upgrades
-- `/src/state/enemyState.ts` - Enemy management
-- `/src/state/gameFlowState.ts` - Pause, game over, levels
-- `/src/state/safeZoneState.ts` - Zone logic (lines 521-640)
-- `/src/state/weaponState.ts` - Weapon selection
-- `/src/state/index.ts` - Combine with Zustand middleware
+### 2.1 Split `gameState.ts` (997 lines) - COMPLETED
+**Created state slices:**
+- `/src/state/types.ts` - All slice type definitions
+- `/src/state/playerSlice.ts` - Health, stats, upgrades, position
+- `/src/state/enemySlice.ts` - Enemy and power-up management
+- `/src/state/gameFlowSlice.ts` - Pause, game over, levels, score
+- `/src/state/safeZoneSlice.ts` - Zone logic and calculations
+- `/src/state/weaponSlice.ts` - Weapon selection
+- `/src/state/inputSlice.ts` - Player input state
+- `/src/state/terrainSlice.ts` - Terrain obstacles
+- `/src/state/index.ts` - Combined store with all slices
+- `/src/utils/gameState.ts` - Re-exports for backward compatibility
 
-### 2.2 Split `GameUI.tsx` (774 lines)
-**Extract components:**
-- `/src/components/ui/HUD.tsx` - Health, score, level
+### 2.2 Split `GameUI.tsx` (774 → 595 lines) - COMPLETED
+**Created components:**
+- `/src/components/ui/HUD.tsx` - Health, score, rank display
 - `/src/components/ui/PlayerStatsPanel.tsx` - Stats display
-- `/src/components/ui/WarningOverlays.tsx` - Zone/combat warnings
-- `/src/components/ui/PauseMenu.tsx` - Pause/settings
-- `/src/components/ui/UpgradeSelection.tsx` - Upgrade UI
+- `/src/components/ui/WarningOverlays.tsx` - Zone/combat warnings (4 components)
+- `/src/components/ui/PauseMenu.tsx` - Pause menu
+- `/src/components/ui/GameOverScreen.tsx` - Game over screen
+- `/src/components/ui/SettingsModal.tsx` - Settings dialog
+- `/src/components/ui/ConfirmDialog.tsx` - Confirmation dialog
 
-### 2.3 DRY Tank Code
-**Current:** `Tank.tsx` (680 lines) and `EnemyTank.tsx` (682 lines) share ~200 lines of duplicate logic
+### 2.3 DRY Tank Code - COMPLETED
+**Before:** `Tank.tsx` (690 lines) and `EnemyTank.tsx` (701 lines) had duplicate collision/projectile logic
 
-**Extract:**
-- `/src/hooks/useTankPhysics.ts` - Collision detection
-- `/src/hooks/useProjectileSpawner.ts` - Firing logic
-- `/src/models/geometry/TankBody.tsx` - Shared 3D geometry
+**Created shared hooks:**
+- `/src/hooks/useTankCollision.ts` (94 lines) - Terrain/obstacle collision detection
+- `/src/hooks/useProjectileManager.ts` (55 lines) - Projectile spawning and removal
+
+**After:** Tank.tsx (664 lines), EnemyTank.tsx (628 lines) - cleaner code with shared logic
 
 ---
 
@@ -151,15 +158,16 @@ npm install -D husky lint-staged
 | Phase | Status | Items |
 |-------|--------|-------|
 | **Phase 1** | COMPLETED | Quick Wins (1.1-1.4) |
-| **Phase 2** | NOT STARTED | Architecture Refactoring (2.1-2.3) |
+| **Phase 2** | COMPLETED | Architecture Refactoring (2.1-2.3) |
 | **Phase 3** | NOT STARTED | Testing & Quality (3.1-3.2) |
 | **Phase 4** | NOT STARTED | Performance Optimizations (4.1-4.3) |
 | **Phase 5** | NOT STARTED | Feature Enhancements (5.1-5.3) |
 
 ---
 
-## Key Files Modified (Phase 1)
+## Key Files Modified
 
+### Phase 1
 - `/src/constants/game.ts` - NEW: Game constants
 - `/src/types/index.ts` - NEW: Consolidated types
 - `/src/utils/gameState.ts` - Updated to use constants and types
@@ -170,6 +178,19 @@ npm install -D husky lint-staged
 - `/src/components/GameUI.tsx` - Type fixes
 - `/src/components/WeaponSelection.tsx` - Type fixes
 - `/src/types.d.ts` - Updated to use central types
+
+### Phase 2
+- `/src/state/` - NEW: State slices directory
+  - `types.ts`, `playerSlice.ts`, `enemySlice.ts`, `gameFlowSlice.ts`
+  - `safeZoneSlice.ts`, `weaponSlice.ts`, `inputSlice.ts`, `terrainSlice.ts`, `index.ts`
+- `/src/components/ui/` - NEW: UI components directory
+  - `HUD.tsx`, `PlayerStatsPanel.tsx`, `WarningOverlays.tsx`, `PauseMenu.tsx`
+  - `GameOverScreen.tsx`, `SettingsModal.tsx`, `ConfirmDialog.tsx`
+- `/src/components/GameUI.tsx` - Refactored to use extracted UI components
+- `/src/hooks/useTankCollision.ts` - NEW: Shared collision detection hook
+- `/src/hooks/useProjectileManager.ts` - NEW: Shared projectile management hook
+- `/src/models/Tank.tsx` - Refactored to use shared hooks
+- `/src/models/EnemyTank.tsx` - Refactored to use shared hooks
 
 ---
 

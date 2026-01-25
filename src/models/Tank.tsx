@@ -14,6 +14,8 @@ import RocketLauncher from "./RocketLauncher";
 import TeslaCoil from "./TeslaCoil";
 import { WeaponInstance } from "../utils/weapons";
 import { GAME_CONSTANTS } from "../constants/game";
+import { useTankCollision } from "../hooks/useTankCollision";
+import { useProjectileManager } from "../hooks/useProjectileManager";
 
 interface TankProps {
   position: [number, number, number];
@@ -45,23 +47,28 @@ const Tank = ({ position = [0, 0, 0], isFirstPerson = false }: TankProps) => {
 
   const tankRotationRef = useRef(Math.PI);
   const turretRotationRef = useRef(0);
-  const lastShootTimeRef = useRef(0);
   const positionRef = useRef<[number, number, number]>([...position]);
   const isInitializedRef = useRef(false);
   const _quat = useRef(new Quaternion()).current;
   const _euler = useRef(new Euler()).current;
   const prevPovToggleRef = useRef(false);
 
+  // Use shared hooks for collision detection and projectile management
+  const { checkTerrainCollision } = useTankCollision({
+    tankRadius: GAME_CONSTANTS.TANK_RADIUS,
+  });
+  const {
+    projectiles,
+    spawnProjectile,
+    removeProjectile,
+    canShoot,
+    recordShot,
+  } = useProjectileManager();
+
   // Memoized Vector3 objects to avoid creating new ones every frame
   const tempVectors = useMemo(() => ({
-    tankPosition: new Vector3(),
-    obstaclePos: new Vector3(),
     targetQuat: new Quaternion(),
   }), []);
-
-  const [projectiles, setProjectiles] = useState<
-    { id: string; position: [number, number, number]; rotation: number }[]
-  >([]);
 
   const {
     forward: keyForward,
@@ -90,34 +97,11 @@ const Tank = ({ position = [0, 0, 0], isFirstPerson = false }: TankProps) => {
     updatePlayerTurretRotation,
     healPlayer,
     selectedWeapons,
-    terrainObstacles,
   } = useGameState();
 
   const sound = useSound();
 
   const sideWeapons = selectedWeapons.slice(0, MAX_SIDE_WEAPONS);
-
-  const checkTerrainCollision = (newX: number, newZ: number): boolean => {
-    const mapBoundary = GAME_CONSTANTS.HALF_MAP_SIZE - 1;
-    if (Math.abs(newX) > mapBoundary || Math.abs(newZ) > mapBoundary) {
-      return true;
-    }
-    tempVectors.tankPosition.set(newX, 0, newZ);
-    const tankRadius = GAME_CONSTANTS.TANK_RADIUS;
-    for (const obstacle of terrainObstacles) {
-      tempVectors.obstaclePos.set(
-        obstacle.position[0],
-        0,
-        obstacle.position[2]
-      );
-      const distance = tempVectors.obstaclePos.distanceTo(tempVectors.tankPosition);
-      const obstacleRadius = obstacle.size * GAME_CONSTANTS.OBSTACLE_RADIUS_MULTIPLIER;
-      if (distance < tankRadius + obstacleRadius) {
-        return true;
-      }
-    }
-    return false;
-  };
 
   useEffect(() => {
     if (playerHealthRegen <= 0) return;
@@ -286,10 +270,9 @@ const Tank = ({ position = [0, 0, 0], isFirstPerson = false }: TankProps) => {
     }
 
     const currentTime = state.clock.getElapsedTime();
-    const timeSinceLastShot = currentTime - lastShootTimeRef.current;
     const isShootingRequested = keyShoot || touchIsFiring;
 
-    if (timeSinceLastShot >= playerFireRate) {
+    if (canShoot(currentTime, playerFireRate)) {
       const shootPosition: [number, number, number] = [
         tankRef.current.position.x +
           Math.sin(tankRotationRef.current + turretRotationRef.current) * 2.15,
@@ -297,15 +280,11 @@ const Tank = ({ position = [0, 0, 0], isFirstPerson = false }: TankProps) => {
         tankRef.current.position.z +
           Math.cos(tankRotationRef.current + turretRotationRef.current) * 2.15,
       ];
-      setProjectiles((prev) => [
-        ...prev,
-        {
-          id: Math.random().toString(36).substr(2, 9),
-          position: shootPosition,
-          rotation: tankRotationRef.current + turretRotationRef.current,
-        },
-      ]);
-      lastShootTimeRef.current = currentTime;
+      spawnProjectile(
+        shootPosition,
+        tankRotationRef.current + turretRotationRef.current
+      );
+      recordShot(currentTime);
 
       sound.setVolume("playerCannon", 0.22);
       sound.play("playerCannon");
@@ -342,10 +321,6 @@ const Tank = ({ position = [0, 0, 0], isFirstPerson = false }: TankProps) => {
     }
     prevPovToggleRef.current = povToggle;
   });
-
-  const removeProjectile = (id: string) => {
-    setProjectiles((prev) => prev.filter((p) => p.id !== id));
-  };
 
   // Use refs directly to avoid creating new Vector3 on each render
   const currentTankPosition = positionRef.current;

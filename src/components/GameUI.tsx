@@ -7,6 +7,19 @@ import StatUpgradeUI from "./StatUpgradeUI";
 import { generateLevel } from "../utils/levelGenerator";
 import TacticalDisplay from "./TacticalDisplay";
 import { useSettings } from "../utils/settingsContext";
+// Extracted UI components
+import HUD from "./ui/HUD";
+import PlayerStatsPanel from "./ui/PlayerStatsPanel";
+import {
+  ContainmentWarning,
+  OutsideZoneWarning,
+  CombatZoneShrinkWarning,
+  OrientationWarning,
+} from "./ui/WarningOverlays";
+import PauseMenu from "./ui/PauseMenu";
+import GameOverScreen from "./ui/GameOverScreen";
+import SettingsModal from "./ui/SettingsModal";
+import ConfirmDialog from "./ui/ConfirmDialog";
 
 // Define BASE_TARGETS constant for enemy count calculation
 const BASE_TARGETS = 1;
@@ -189,23 +202,6 @@ const GameUI = () => {
     },
     [applyEnhancement]
   );
-
-  const hullIntegrityPercentage = (playerHealth / playerMaxHealth) * 100;
-  const promotionProgressPercentage =
-    (targetsEliminated / targetsRequiredForPromotion) * 100;
-
-  const getHullColor = () => {
-    if (hullIntegrityPercentage > 60) return "var(--color-hull-high)";
-    if (hullIntegrityPercentage > 30) return "var(--color-hull-medium)";
-    return "var(--color-hull-low)";
-  };
-
-  const getRankColor = () => {
-    if (rank <= 15) return "var(--color-rank-low)"; // Early game - 5 damage
-    if (rank <= 25) return "var(--color-rank-medium)"; // Mid game - 10 damage
-    if (rank <= 40) return "var(--color-rank-high)"; // Late mid game - 15 damage
-    return "var(--color-rank-elite)"; // Late game - 20 damage
-  };
 
   const renderWeaponSelection = () => {
     if (!showWeaponSelection || isGameOver) {
@@ -467,51 +463,16 @@ const GameUI = () => {
     }
   }, [restartGame]);
 
-  // Render the orientation warning overlay
-  const renderOrientationWarning = () => {
-    if (!showOrientationWarning) return null;
-
-    return (
-      <div className="orientation-warning-overlay">
-        <div className="orientation-warning-content">
-          <div className="warning-header">
-            <div className="warning-icon">!</div>
-            ALERT: DEVICE ORIENTATION
-          </div>
-          <div className="warning-message">ROTATE DEVICE TO LANDSCAPE MODE</div>
-          <div className="warning-detail">
-            Combat systems require landscape orientation for optimal operation
-          </div>
-          <button
-            className="dismiss-button"
-            onClick={() => setOrientationWarning(false)}>
-            DISMISS WARNING
-          </button>
-        </div>
-      </div>
-    );
-  };
 
   return (
     <div
       className={`game-ui military-theme ${
         isGameOver ? "blur-background" : ""
       } ${isMobile ? "mobile" : ""}`}>
-      {showContainmentWarning && !isGameOver && !isPaused && (
-        <div
-          className="warning-overlay containment-warning"
-          style={
-            {
-              "--opacity": containmentWarningOpacityRef.current,
-            } as React.CSSProperties
-          }>
-          <div className="warning-icon">☢️</div>
-          <div className="warning-text">
-            <div>Combat Zone shrinking</div>
-          </div>
-          <div className="warning-icon">☢️</div>
-        </div>
-      )}
+      <ContainmentWarning
+        show={showContainmentWarning && !isGameOver && !isPaused}
+        opacity={containmentWarningOpacityRef.current}
+      />
       {!isGameOver && !isPaused && !isMobile && (
         <TacticalDisplay
           playerTankPosition={playerTankPosition}
@@ -526,85 +487,26 @@ const GameUI = () => {
           elapsedTime={elapsedTime}
         />
       )}
-      <div className="top-hud">
-        <div className="hud-element hull-integrity">
-          <div className="hud-label">HULL INTEGRITY</div>
-          <div className="progress-bar-container">
-            <div
-              className="progress-bar"
-              style={{
-                width: `${hullIntegrityPercentage}%`,
-                backgroundColor: getHullColor(),
-              }}
-            />
-            <div className="progress-text">
-              {playerHealth.toFixed(0)} / {playerMaxHealth.toFixed(0)}
-            </div>
-          </div>
-        </div>
-        <div className="hud-element combat-score">
-          <div className="hud-label">COMBAT SCORE</div>
-          <div className="score-value">{score}</div>
-        </div>
-        <div className="hud-element rank-progression">
-          <div className="hud-label">
-            RANK <span className="rank-indicator">{rank}</span>
-            <span className="target-count-info">
-              (Targets: {getMaxTargets(rank)})
-            </span>
-          </div>
-          <div className="progress-bar-container">
-            <div
-              className="progress-bar"
-              style={{
-                width: `${promotionProgressPercentage}%`,
-                backgroundColor: getRankColor(),
-              }}
-            />
-            <div className="progress-text">
-              {targetsEliminated} / {targetsRequiredForPromotion}
-            </div>
-          </div>
-        </div>
-      </div>
+      <HUD
+        playerHealth={playerHealth}
+        playerMaxHealth={playerMaxHealth}
+        score={score}
+        rank={rank}
+        targetsEliminated={targetsEliminated}
+        targetsRequiredForPromotion={targetsRequiredForPromotion}
+        getMaxTargets={getMaxTargets}
+      />
       {!isMobile && (
-        <div className="player-stats-panel">
-          <div className="panel-header">UNIT STATUS</div>
-          <div className="stat-line">
-            <span>Armor:</span>
-            <span>{playerMaxHealth} HP</span>
-          </div>
-          <div className="stat-line">
-            <span>Repairs:</span>
-            <span>{playerHealthRegen.toFixed(1)} HP/s</span>
-          </div>
-          <div className="stat-line">
-            <span>Firepower:</span>
-            <span>{playerTurretDamage} DMG</span>
-          </div>
-          <div className="stat-line">
-            <span>RoF:</span>
-            <span>{(1 / playerFireRate).toFixed(1)} rps</span>
-          </div>
-          <div className="stat-line">
-            <span>Muzzle Vel:</span>
-            <span>{playerBulletVelocity} m/s</span>
-          </div>
-          <div className="stat-line">
-            <span>Penetration:</span>
-            <span>
-              {playerPenetration} {playerPenetration === 1 ? "Tank" : "Tanks"}
-            </span>
-          </div>
-          <div className="stat-line">
-            <span>Mobility:</span>
-            <span>{playerSpeed.toFixed(1)} m/s</span>
-          </div>
-          <div className="stat-line">
-            <span>Sensors:</span>
-            <span>{playerCameraRange.toFixed(0)}m</span>
-          </div>
-        </div>
+        <PlayerStatsPanel
+          playerMaxHealth={playerMaxHealth}
+          playerHealthRegen={playerHealthRegen}
+          playerTurretDamage={playerTurretDamage}
+          playerFireRate={playerFireRate}
+          playerBulletVelocity={playerBulletVelocity}
+          playerPenetration={playerPenetration}
+          playerSpeed={playerSpeed}
+          playerCameraRange={playerCameraRange}
+        />
       )}
 
       {/* Use our new StatUpgradeUI component instead of inline enhancement UI */}
@@ -615,130 +517,48 @@ const GameUI = () => {
         />
       )}
 
-      {isOutsideCombatZone && !isGameOver && !isPaused && (
-        <div
-          className="warning-overlay outside-zone-warning"
-          style={
-            { "--opacity": warningOpacityRef.current } as React.CSSProperties
-          }>
-          <div className="warning-icon">🚨</div>
-          <div className="warning-text">WARNING: ZONE DAMAGE</div>
-          <div className="warning-icon">🚨</div>
-        </div>
-      )}
-      {/* Combat Zone Warning */}
-      {isCombatZoneWarningVisible && !isGameOver && !isPaused && (
-        <div className="combat-zone-warning">Combat zone is shrinking!</div>
-      )}
+      <OutsideZoneWarning
+        show={isOutsideCombatZone && !isGameOver && !isPaused}
+        opacity={warningOpacityRef.current}
+      />
+      <CombatZoneShrinkWarning
+        show={isCombatZoneWarningVisible && !isGameOver && !isPaused}
+      />
       {isGameOver && (
-        <div className="overlay game-over-overlay">
-          <div className="overlay-content game-over-content">
-            <h2 className="game-over-title">MISSION FAILED</h2>
-            <p>Combat Score: {score}</p>
-            <p>Highest Rank Achieved: {rank}</p>
-            <p>
-              Time Survived: {Math.floor(elapsedTime / 60)}m {elapsedTime % 60}s
-            </p>
-            <button
-              className="ui-button restart-button"
-              onClick={handleRestartGame}>
-              RE-DEPLOY
-            </button>
-          </div>
-        </div>
+        <GameOverScreen
+          score={score}
+          rank={rank}
+          elapsedTime={elapsedTime}
+          onRestart={handleRestartGame}
+        />
       )}
       {isPaused &&
         !isGameOver &&
         !showEnhancementUI &&
         !showWeaponSelection &&
         !showSettings && (
-          <div className="overlay pause-overlay">
-            <div className="overlay-content pause-content">
-              <h2 className="pause-title">OPERATION PAUSED</h2>
-              <button
-                className="ui-button main-menu-button"
-                onClick={handleReturnToMenuClick}>
-                MAIN MENU
-              </button>
-              <button
-                className="ui-button main-menu-button"
-                onClick={handleOpenSettings}>
-                SETTINGS
-              </button>
-              <button className="ui-button resume-button" onClick={togglePause}>
-                RESUME
-              </button>
-            </div>
-          </div>
+          <PauseMenu
+            onResume={togglePause}
+            onMainMenu={handleReturnToMenuClick}
+            onSettings={handleOpenSettings}
+          />
         )}
       {showSettings && (
-        <div className="overlay settings-overlay">
-          <div className="overlay-content settings-content">
-            <h2 className="settings-title">SETTINGS</h2>
-            <div className="settings-body">
-              <div className="setting-group">
-                <label className="setting-label">Master Volume</label>
-                <div className="setting-control">
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    value={masterVolume}
-                    onChange={(e) => setMasterVolume(parseInt(e.target.value))}
-                    className="setting-slider"
-                  />
-                  <span className="setting-value">{masterVolume}%</span>
-                </div>
-              </div>
-              <div className="setting-group">
-                <label className="setting-label">Sound Effects</label>
-                <div className="setting-control">
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    value={soundEffectsVolume}
-                    onChange={(e) =>
-                      setSoundEffectsVolume(parseInt(e.target.value))
-                    }
-                    className="setting-slider"
-                  />
-                  <span className="setting-value">{soundEffectsVolume}%</span>
-                </div>
-              </div>
-            </div>
-            <div className="settings-buttons">
-              <button
-                className="settings-button secondary"
-                onClick={handleCloseSettings}>
-                CLOSE
-              </button>
-              <button className="settings-button" onClick={handleCloseSettings}>
-                APPLY
-              </button>
-            </div>
-          </div>
-        </div>
+        <SettingsModal
+          masterVolume={masterVolume}
+          soundEffectsVolume={soundEffectsVolume}
+          onMasterVolumeChange={setMasterVolume}
+          onSoundEffectsVolumeChange={setSoundEffectsVolume}
+          onClose={handleCloseSettings}
+        />
       )}
       {showMainMenuConfirm && (
-        <div className="overlay confirm-dialog-overlay">
-          <div className="overlay-content confirm-dialog-content">
-            <h2 className="confirm-title">Confirm</h2>
-            <p>Are you sure you want to return to the main menu?</p>
-            <div className="confirm-buttons">
-              <button
-                className="ui-button yes-button"
-                onClick={handleConfirmReturn}>
-                Yes
-              </button>
-              <button
-                className="ui-button no-button"
-                onClick={handleCancelReturn}>
-                No
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConfirmDialog
+          title="Confirm"
+          message="Are you sure you want to return to the main menu?"
+          onConfirm={handleConfirmReturn}
+          onCancel={handleCancelReturn}
+        />
       )}
       {renderWeaponSelection()}
       {!isGameOver && !isMobile && (
@@ -764,8 +584,10 @@ const GameUI = () => {
           </button>
         )}
 
-      {/* Device orientation warning overlay */}
-      {renderOrientationWarning()}
+      <OrientationWarning
+        show={showOrientationWarning}
+        onDismiss={() => setOrientationWarning(false)}
+      />
     </div>
   );
 };

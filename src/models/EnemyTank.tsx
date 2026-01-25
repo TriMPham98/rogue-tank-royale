@@ -6,6 +6,8 @@ import { Enemy, useGameState } from "../utils/gameState";
 import Projectile from "./Projectile";
 import { debug } from "../utils/debug";
 import { GAME_CONSTANTS } from "../constants/game";
+import { useTankCollision } from "../hooks/useTankCollision";
+import { useProjectileManager } from "../hooks/useProjectileManager";
 
 interface EnemyTankProps {
   enemy: Enemy;
@@ -19,7 +21,22 @@ const EnemyTank = ({ enemy }: EnemyTankProps) => {
 
   const tankRotationRef = useRef(0);
   const turretRotationRef = useRef(0);
-  const lastShootTimeRef = useRef(0);
+
+  const isBomber = enemy.type === "bomber";
+  const tankRadius = isBomber ? GAME_CONSTANTS.BOMBER_RADIUS : GAME_CONSTANTS.TANK_RADIUS;
+
+  // Use shared hooks for collision detection and projectile management
+  const { checkTerrainCollision } = useTankCollision({
+    tankRadius,
+    enemyId: enemy.id,
+  });
+  const {
+    projectiles,
+    spawnProjectile,
+    removeProjectile,
+    canShoot,
+    recordShot,
+  } = useProjectileManager();
 
   // Memoized Vector3 objects to avoid creating new ones every frame
   const tempVectors = useMemo(() => ({
@@ -40,9 +57,6 @@ const EnemyTank = ({ enemy }: EnemyTankProps) => {
   const tempQuat = useMemo(() => new Quaternion(), []);
 
   const [healthPercent, setHealthPercent] = useState(1);
-  const [projectiles, setProjectiles] = useState<
-    { id: string; position: [number, number, number]; rotation: number }[]
-  >([]);
 
   const damageEnemy = useGameState((state) => state.damageEnemy);
   const updateEnemyPosition = useGameState(
@@ -54,83 +68,12 @@ const EnemyTank = ({ enemy }: EnemyTankProps) => {
 
   const maxHealthRef = useRef(enemy.health);
 
-  const isBomber = enemy.type === "bomber";
   const isTank = enemy.type === "tank";
-  const tankRadius = isBomber ? GAME_CONSTANTS.BOMBER_RADIUS : GAME_CONSTANTS.TANK_RADIUS;
   const moveSpeed = enemy.speed || (isBomber ? GAME_CONSTANTS.ENEMY_BOMBER_BASE_SPEED : GAME_CONSTANTS.ENEMY_TANK_BASE_SPEED);
 
   useEffect(() => {
     maxHealthRef.current = enemy.health;
   }, []);
-
-  // Memoized vectors for collision checking
-  const collisionVectors = useMemo(() => ({
-    tankPosition: new Vector3(),
-    obstaclePos: new Vector3(),
-  }), []);
-
-  const checkTerrainCollision = useCallback(
-    (newX: number, newZ: number): boolean => {
-      const mapBoundary = GAME_CONSTANTS.HALF_MAP_SIZE - 1;
-      if (Math.abs(newX) > mapBoundary || Math.abs(newZ) > mapBoundary) {
-        return true;
-      }
-
-      collisionVectors.tankPosition.set(newX, 0, newZ);
-      const terrainObstacles = getState().terrainObstacles;
-
-      // If there are no terrain obstacles, don't block movement
-      if (terrainObstacles.length === 0 && getState().enemies.length === 0) {
-        return false;
-      }
-
-      // Check collision with terrain obstacles
-      for (const obstacle of terrainObstacles) {
-        if (obstacle.type === "rock") {
-          collisionVectors.obstaclePos.set(
-            obstacle.position[0],
-            0,
-            obstacle.position[2]
-          );
-          const distance = collisionVectors.obstaclePos.distanceTo(collisionVectors.tankPosition);
-          const obstacleRadius = obstacle.size * GAME_CONSTANTS.OBSTACLE_RADIUS_MULTIPLIER;
-
-          // Small safety margin added to prevent getting too close
-          const safetyMargin = 0.1;
-
-          if (distance < tankRadius + obstacleRadius + safetyMargin) {
-            return true;
-          }
-        }
-      }
-
-      // Check collision with blue turrets (enemy type "turret")
-      const enemies = getState().enemies;
-      for (const otherEnemy of enemies) {
-        // Skip checking collision with self
-        if (otherEnemy.id === enemy.id) continue;
-
-        // Only check for turrets
-        if (otherEnemy.type === "turret") {
-          collisionVectors.obstaclePos.set(
-            otherEnemy.position[0],
-            0,
-            otherEnemy.position[2]
-          );
-          const distance = collisionVectors.obstaclePos.distanceTo(collisionVectors.tankPosition);
-          const turretRadius = GAME_CONSTANTS.TURRET_COLLISION_RADIUS;
-          const safetyMargin = 0.2;
-
-          if (distance < tankRadius + turretRadius + safetyMargin) {
-            return true;
-          }
-        }
-      }
-
-      return false;
-    },
-    [tankRadius, getState, enemy.id, collisionVectors]
-  );
 
   useFrame((state, delta) => {
     if (isPaused || isGameOver || !tankRef.current) return;
@@ -181,41 +124,30 @@ const EnemyTank = ({ enemy }: EnemyTankProps) => {
     if (!isBomber && turretRef.current) {
       const shootingRange = isTank ? GAME_CONSTANTS.ENEMY_TANK_SHOOTING_RANGE : GAME_CONSTANTS.ENEMY_TURRET_SHOOTING_RANGE;
       const fireRate = isTank ? GAME_CONSTANTS.ENEMY_TANK_FIRE_RATE : GAME_CONSTANTS.ENEMY_TURRET_FIRE_RATE;
+      const currentTime = state.clock.getElapsedTime();
 
-      if (distanceToPlayer < shootingRange) {
-        const timeSinceLastShot =
-          state.clock.getElapsedTime() - lastShootTimeRef.current;
-        if (timeSinceLastShot > fireRate) {
-          const barrelEndLocalZ = isTank ? 1.75 : 2.2;
-          tempVectors.barrelEndLocal.set(0, 0.2, barrelEndLocalZ);
-          tempVectors.barrelEndWorld.copy(tempVectors.barrelEndLocal);
-          turretRef.current.localToWorld(tempVectors.barrelEndWorld);
+      if (distanceToPlayer < shootingRange && canShoot(currentTime, fireRate)) {
+        const barrelEndLocalZ = isTank ? 1.75 : 2.2;
+        tempVectors.barrelEndLocal.set(0, 0.2, barrelEndLocalZ);
+        tempVectors.barrelEndWorld.copy(tempVectors.barrelEndLocal);
+        turretRef.current.localToWorld(tempVectors.barrelEndWorld);
 
-          const shootPosition: [number, number, number] = [
-            tempVectors.barrelEndWorld.x,
-            tempVectors.barrelEndWorld.y,
-            tempVectors.barrelEndWorld.z,
-          ];
+        const shootPosition: [number, number, number] = [
+          tempVectors.barrelEndWorld.x,
+          tempVectors.barrelEndWorld.y,
+          tempVectors.barrelEndWorld.z,
+        ];
 
-          turretRef.current.getWorldQuaternion(tempQuat);
-          tempVectors.shootDirection.set(0, 0, 1).applyQuaternion(tempQuat);
-          const projectileRotation = Math.atan2(
-            tempVectors.shootDirection.x,
-            tempVectors.shootDirection.z
-          );
+        turretRef.current.getWorldQuaternion(tempQuat);
+        tempVectors.shootDirection.set(0, 0, 1).applyQuaternion(tempQuat);
+        const projectileRotation = Math.atan2(
+          tempVectors.shootDirection.x,
+          tempVectors.shootDirection.z
+        );
 
-          setProjectiles((prev) => [
-            ...prev,
-            {
-              id: Math.random().toString(36).substr(2, 9),
-              position: shootPosition,
-              rotation: projectileRotation,
-            },
-          ]);
-
-          lastShootTimeRef.current = state.clock.getElapsedTime();
-          debug.log(`Enemy ${enemy.id} (${enemy.type}) fired at player`);
-        }
+        spawnProjectile(shootPosition, projectileRotation);
+        recordShot(currentTime);
+        debug.log(`Enemy ${enemy.id} (${enemy.type}) fired at player`);
       }
     }
 
@@ -394,10 +326,6 @@ const EnemyTank = ({ enemy }: EnemyTankProps) => {
     },
     [damageEnemy, enemy.id]
   );
-
-  const removeProjectile = useCallback((id: string) => {
-    setProjectiles((prev) => prev.filter((p) => p.id !== id));
-  }, []);
 
   const bomberBaseRadius = 1.2;
   const bomberBaseBottomRadius = 1.4;
