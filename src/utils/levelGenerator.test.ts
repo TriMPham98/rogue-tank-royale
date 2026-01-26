@@ -38,7 +38,7 @@ describe("levelGenerator", () => {
       safeZoneActive: false,
       spawnEnemy: vi.fn(),
       isTerrainReady: true,
-    } as ReturnType<typeof useGameState.getState>);
+    } as unknown as ReturnType<typeof useGameState.getState>);
   });
 
   describe("generateRandomPosition", () => {
@@ -80,7 +80,7 @@ describe("levelGenerator", () => {
         safeZoneActive: false,
         spawnEnemy: vi.fn(),
         isTerrainReady: true,
-      } as ReturnType<typeof useGameState.getState>);
+      } as unknown as ReturnType<typeof useGameState.getState>);
 
       for (let i = 0; i < 5; i++) {
         const position = generateRandomPosition(50, []);
@@ -109,7 +109,7 @@ describe("levelGenerator", () => {
         safeZoneActive: false,
         spawnEnemy: vi.fn(),
         isTerrainReady: true,
-      } as ReturnType<typeof useGameState.getState>);
+      } as unknown as ReturnType<typeof useGameState.getState>);
 
       // Should still return a valid position (possibly emergency fallback)
       const position = generateRandomPosition(50, [], 5, 10);
@@ -186,7 +186,7 @@ describe("levelGenerator", () => {
         safeZoneActive: false,
         spawnEnemy: vi.fn(),
         isTerrainReady: true,
-      } as ReturnType<typeof useGameState.getState>);
+      } as unknown as ReturnType<typeof useGameState.getState>);
 
       // Generate at level 20 to potentially get bombers
       const enemies = generateEnemies(20, [0, 0.5, 0]);
@@ -195,7 +195,9 @@ describe("levelGenerator", () => {
       const bombers = enemies.filter((e) => e.type === "bomber");
 
       if (tanks.length > 0 && bombers.length > 0) {
-        expect(bombers[0].speed).toBeGreaterThan(tanks[0].speed);
+        const bomberSpeed = bombers[0].speed ?? 0;
+        const tankSpeed = tanks[0].speed ?? 0;
+        expect(bomberSpeed).toBeGreaterThan(tankSpeed);
       }
     });
 
@@ -210,7 +212,7 @@ describe("levelGenerator", () => {
         safeZoneActive: true,
         spawnEnemy: vi.fn(),
         isTerrainReady: true,
-      } as ReturnType<typeof useGameState.getState>);
+      } as unknown as ReturnType<typeof useGameState.getState>);
 
       const enemies = generateEnemies(10, [0, 0.5, 0]);
 

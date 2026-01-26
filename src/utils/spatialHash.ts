@@ -8,6 +8,7 @@ export interface SpatialEntity {
   x: number;
   z: number;
   radius: number;
+  type?: string; // Optional type for filtering (e.g., "tank", "turret", "bomber", "rock")
 }
 
 export class SpatialHash<T extends SpatialEntity> {
@@ -19,12 +20,6 @@ export class SpatialHash<T extends SpatialEntity> {
     this.cellSize = cellSize;
     this.grid = new Map();
     this.entityCells = new Map();
-  }
-
-  private getCellKey(x: number, z: number): string {
-    const cellX = Math.floor(x / this.cellSize);
-    const cellZ = Math.floor(z / this.cellSize);
-    return `${cellX},${cellZ}`;
   }
 
   private getCellsForEntity(entity: T): string[] {

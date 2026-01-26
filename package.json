@@ -12,6 +12,7 @@
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
+    "typecheck:build": "tsc -b",
     "prepare": "husky"
   },
   "dependencies": {
