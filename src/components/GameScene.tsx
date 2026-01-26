@@ -25,6 +25,7 @@ import { debug } from "../utils/debug";
 import { globalFPSTracker } from "../utils/fpsTracker";
 import MobileJoysticks from "../components/MobileJoysticks";
 import { GAME_CONSTANTS } from "../constants/game";
+import { useObstacleSpatialHash, useEnemySpatialHash, resetSpatialHashes } from "../hooks/useSpatialHash";
 
 // Custom hook to calculate light intensity based on game level
 const useLightIntensity = () => {
@@ -466,6 +467,26 @@ const IntroSpotlight = () => {
   );
 };
 
+// Component to initialize and maintain spatial hashes for collision optimization
+const SpatialHashManager = () => {
+  // Initialize spatial hashes for obstacles and enemies
+  useObstacleSpatialHash();
+  useEnemySpatialHash();
+
+  // Reset spatial hashes on game restart
+  useEffect(() => {
+    const unsubscribe = useGameState.subscribe((state, prevState) => {
+      if (prevState.level > 1 && state.level === 1) {
+        resetSpatialHashes();
+        debug.log("SpatialHashManager: Reset spatial hashes on game restart");
+      }
+    });
+    return unsubscribe;
+  }, []);
+
+  return null;
+};
+
 const SceneContent = memo((): JSX.Element => {
   const {
     ambientIntensity,
@@ -486,6 +507,7 @@ const SceneContent = memo((): JSX.Element => {
 
   return (
     <Suspense fallback={null}>
+      <SpatialHashManager />
       <EnemyRespawnManager />
       <ambientLight
         intensity={ambientIntensity}
