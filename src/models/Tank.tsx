@@ -532,36 +532,40 @@ const Tank = ({ position = [0, 0, 0], isFirstPerson = false }: TankProps) => {
           </Cylinder>
         ))}
         <group position={[0, 0.5, 0]} ref={turretRef}>
-          <Cylinder
-            args={[0.6, 0.6, 0.2, 20]}
-            position={[0, 0.1, 0]}
-            castShadow>
-            <meshStandardMaterial
-              color="darkolivegreen"
-              metalness={0.4}
-              roughness={0.6}
-            />
-          </Cylinder>
-          <Cylinder
-            args={[0.7, 0.8, 0.5, 20]}
-            position={[0, 0.25, 0]}
-            castShadow>
-            <meshStandardMaterial
-              color="darkolivegreen"
-              metalness={0.4}
-              roughness={0.6}
-            />
-          </Cylinder>
-          <Cylinder
-            args={[0.35, 0.35, 0.15, 16]}
-            position={[0, 0.55, -0.3]}
-            castShadow>
-            <meshStandardMaterial
-              color="#4a5e2a"
-              metalness={0.4}
-              roughness={0.6}
-            />
-          </Cylinder>
+          {!isFirstPerson && (
+            <>
+              <Cylinder
+                args={[0.6, 0.6, 0.2, 20]}
+                position={[0, 0.1, 0]}
+                castShadow>
+                <meshStandardMaterial
+                  color="darkolivegreen"
+                  metalness={0.4}
+                  roughness={0.6}
+                />
+              </Cylinder>
+              <Cylinder
+                args={[0.7, 0.8, 0.5, 20]}
+                position={[0, 0.25, 0]}
+                castShadow>
+                <meshStandardMaterial
+                  color="darkolivegreen"
+                  metalness={0.4}
+                  roughness={0.6}
+                />
+              </Cylinder>
+              <Cylinder
+                args={[0.35, 0.35, 0.15, 16]}
+                position={[0, 0.55, -0.3]}
+                castShadow>
+                <meshStandardMaterial
+                  color="#4a5e2a"
+                  metalness={0.4}
+                  roughness={0.6}
+                />
+              </Cylinder>
+            </>
+          )}
           <Cylinder
             args={[0.12, 0.12, 1.8, 16]}
             position={[0, 0.25, 1.1]}
@@ -640,6 +644,30 @@ const Tank = ({ position = [0, 0, 0], isFirstPerson = false }: TankProps) => {
                 />
               </Sphere>
             </>
+          )}
+          {isFirstPerson && (
+            <group position={[0, 0.25, 3.5]}>
+              {/* Horizontal bar */}
+              <Box args={[0.3, 0.02, 0.02]}>
+                <meshStandardMaterial
+                  color="#00ff00"
+                  emissive="#00ff00"
+                  emissiveIntensity={1.5}
+                  transparent
+                  opacity={0.9}
+                />
+              </Box>
+              {/* Vertical bar */}
+              <Box args={[0.02, 0.3, 0.02]}>
+                <meshStandardMaterial
+                  color="#00ff00"
+                  emissive="#00ff00"
+                  emissiveIntensity={1.5}
+                  transparent
+                  opacity={0.9}
+                />
+              </Box>
+            </group>
           )}
         </group>
       </group>

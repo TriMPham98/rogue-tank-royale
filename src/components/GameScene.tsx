@@ -18,7 +18,7 @@ import {
 } from "react";
 import { useGameState } from "../utils/gameState";
 import { shallow } from "zustand/shallow";
-import { Vector3, SpotLight as ThreeSpotLight, PerspectiveCamera } from "three";
+import { Vector3, Quaternion, Euler, SpotLight as ThreeSpotLight, PerspectiveCamera } from "three";
 import "./GameScene.css";
 import { useRespawnManager } from "../utils/respawnManager";
 import { debug } from "../utils/debug";
@@ -146,6 +146,9 @@ const EnemyRespawnManager = () => {
   return null;
 };
 
+// Smoothstep helper for smooth transitions
+const smoothstep = (t: number): number => t * t * (3 - 2 * t);
+
 // Component to follow the player's tank with the camera
 const FollowCamera = memo(() => {
   const { camera } = useThree();
@@ -171,6 +174,64 @@ const FollowCamera = memo(() => {
     hasCompleted: false,
   });
 
+  // Pre-allocated refs for FPV state (zero per-frame allocations)
+  const fpvTargetPosRef = useRef(new Vector3());
+  const fpvTargetQuatRef = useRef(new Quaternion());
+  const fpvCurrentPosRef = useRef(new Vector3());
+  const fpvCurrentQuatRef = useRef(new Quaternion());
+  const fpvLookAtRef = useRef(new Vector3());
+  const fpvEulerRef = useRef(new Euler(0, 0, 0, "YXZ"));
+  const fpvDirectionRef = useRef(new Vector3());
+  const fpvPrevPosRef = useRef(new Vector3());
+  const fpvTransitionRef = useRef({
+    active: false,
+    time: 0,
+    startPos: new Vector3(),
+    startQuat: new Quaternion(),
+    startFov: GAME_CONSTANTS.DEFAULT_CAMERA_FOV as number,
+  });
+  const fpvPrevFirstPersonRef = useRef(false);
+  const fpvInitializedRef = useRef(false);
+
+  // Compute ideal FPV camera pose (horizon-locked via YXZ Euler)
+  const computeFPVTarget = (
+    playerPos: [number, number, number],
+    turretRot: number
+  ) => {
+    const dir = fpvDirectionRef.current;
+    dir.set(Math.sin(turretRot), 0, Math.cos(turretRot));
+
+    const targetPos = fpvTargetPosRef.current;
+    targetPos.set(
+      playerPos[0] + dir.x * GAME_CONSTANTS.FPV_FORWARD_OFFSET,
+      playerPos[1] + GAME_CONSTANTS.FPV_EYE_HEIGHT,
+      playerPos[2] + dir.z * GAME_CONSTANTS.FPV_FORWARD_OFFSET
+    );
+
+    // Look-at point far ahead for angular stability
+    const lookAt = fpvLookAtRef.current;
+    lookAt.set(
+      targetPos.x + dir.x * GAME_CONSTANTS.FPV_LOOK_AHEAD_DISTANCE,
+      targetPos.y + GAME_CONSTANTS.FPV_PITCH_ANGLE * GAME_CONSTANTS.FPV_LOOK_AHEAD_DISTANCE,
+      targetPos.z + dir.z * GAME_CONSTANTS.FPV_LOOK_AHEAD_DISTANCE
+    );
+
+    // Horizon-locked rotation via YXZ Euler (roll fixed at 0)
+    // Three.js cameras look along -Z, so yaw = atan2(-dx, -dz)
+    // and positive euler.x pitches upward, so pitch = atan2(dy, horiz)
+    const euler = fpvEulerRef.current;
+    const dx = lookAt.x - targetPos.x;
+    const dy = lookAt.y - targetPos.y;
+    const dz = lookAt.z - targetPos.z;
+    euler.set(
+      Math.atan2(dy, Math.sqrt(dx * dx + dz * dz)),
+      Math.atan2(-dx, -dz),
+      0,
+      "YXZ"
+    );
+    fpvTargetQuatRef.current.setFromEuler(euler);
+  };
+
   useEffect(() => {
     // Watch for changes to the shouldResetCameraAnimation flag
     const unsubscribe = useGameState.subscribe((state, prevState) => {
@@ -190,6 +251,11 @@ const FollowCamera = memo(() => {
           isRunning: false,
           hasCompleted: false,
         };
+
+        // Reset FPV state
+        fpvInitializedRef.current = false;
+        fpvPrevFirstPersonRef.current = false;
+        fpvTransitionRef.current.active = false;
 
         // FORCE camera back to initial high/far state
         const playerPosition = state.playerTankPosition;
@@ -244,31 +310,126 @@ const FollowCamera = memo(() => {
     const isFirstPersonView = gameState.isFirstPersonView;
     const turretRotation = gameState.playerTurretRotation;
     if (playerPosition) {
+      // --- FPV transition detection ---
+      const justToggled = isFirstPersonView !== fpvPrevFirstPersonRef.current;
+      fpvPrevFirstPersonRef.current = isFirstPersonView;
+
+      if (justToggled) {
+        // Capture current camera pose as transition start
+        const tr = fpvTransitionRef.current;
+        tr.active = true;
+        tr.time = 0;
+        tr.startPos.copy(camera.position);
+        tr.startQuat.copy(camera.quaternion);
+        tr.startFov = (camera as PerspectiveCamera).fov;
+      }
+
       if (isFirstPersonView) {
-        const turretPos = [
-          playerPosition[0],
-          playerPosition[1] + 0.5,
-          playerPosition[2],
-        ];
-        const eyeHeight = 1.5;
-        const forwardOffset = -4.5;
-        const direction = new Vector3(
-          Math.sin(turretRotation),
-          0,
-          Math.cos(turretRotation)
-        );
-        const cameraPos = new Vector3(...turretPos).add(
-          direction.clone().multiplyScalar(forwardOffset)
-        );
-        cameraPos.y += eyeHeight;
-        const lookAtPos = cameraPos.clone().add(direction);
-        camera.position.copy(cameraPos);
-        camera.lookAt(lookAtPos);
+        // Compute ideal FPV target pose
+        computeFPVTarget(playerPosition, turretRotation);
+
         const perspCamera = camera as PerspectiveCamera;
-        perspCamera.fov = 75;
+        const tr = fpvTransitionRef.current;
+
+        if (tr.active) {
+          // --- Transition animation (smoothstep over TRANSITION_DURATION) ---
+          tr.time += delta;
+          const t = Math.min(tr.time / GAME_CONSTANTS.FPV_TRANSITION_DURATION, 1.0);
+          const s = smoothstep(t);
+
+          // Interpolate position
+          fpvCurrentPosRef.current.copy(tr.startPos).lerp(fpvTargetPosRef.current, s);
+          // Interpolate rotation
+          fpvCurrentQuatRef.current.copy(tr.startQuat).slerp(fpvTargetQuatRef.current, s);
+          // Interpolate FOV
+          perspCamera.fov = tr.startFov + (GAME_CONSTANTS.FPV_FOV - tr.startFov) * s;
+          perspCamera.updateProjectionMatrix();
+
+          camera.position.copy(fpvCurrentPosRef.current);
+          camera.quaternion.copy(fpvCurrentQuatRef.current);
+
+          if (t >= 1.0) {
+            tr.active = false;
+            fpvInitializedRef.current = true;
+            fpvPrevPosRef.current.copy(fpvTargetPosRef.current);
+          }
+        } else {
+          // --- Steady-state FPV with damping ---
+          if (!fpvInitializedRef.current) {
+            // First frame in FPV without transition - snap to target
+            fpvCurrentPosRef.current.copy(fpvTargetPosRef.current);
+            fpvCurrentQuatRef.current.copy(fpvTargetQuatRef.current);
+            fpvPrevPosRef.current.copy(fpvTargetPosRef.current);
+            fpvInitializedRef.current = true;
+          }
+
+          // High-frequency filter: clamp position jumps > 0.5 units/frame
+          const jumpDist = fpvTargetPosRef.current.distanceTo(fpvPrevPosRef.current);
+          if (jumpDist > 0.5) {
+            // Clamp the target to max 0.5 units from previous position
+            fpvTargetPosRef.current.copy(fpvPrevPosRef.current).lerp(
+              fpvTargetPosRef.current,
+              0.5 / jumpDist
+            );
+          }
+          fpvPrevPosRef.current.copy(fpvTargetPosRef.current);
+
+          // Exponential position smoothing
+          const posFactor = 1.0 - Math.exp(-GAME_CONSTANTS.FPV_POSITION_LERP_FACTOR * delta);
+          fpvCurrentPosRef.current.lerp(fpvTargetPosRef.current, posFactor);
+
+          // Quaternion slerp for rotation smoothing
+          const rotFactor = 1.0 - Math.exp(-GAME_CONSTANTS.FPV_ROTATION_LERP_FACTOR * delta);
+          fpvCurrentQuatRef.current.slerp(fpvTargetQuatRef.current, rotFactor);
+
+          camera.position.copy(fpvCurrentPosRef.current);
+          camera.quaternion.copy(fpvCurrentQuatRef.current);
+
+          perspCamera.fov = GAME_CONSTANTS.FPV_FOV;
+          perspCamera.updateProjectionMatrix();
+        }
+        return; // Skip third-person code
+      }
+
+      // --- Transitioning OUT of FPV back to third-person ---
+      if (fpvTransitionRef.current.active && !isFirstPersonView) {
+        const tr = fpvTransitionRef.current;
+        tr.time += delta;
+        const t = Math.min(tr.time / GAME_CONSTANTS.FPV_TRANSITION_DURATION, 1.0);
+        const s = smoothstep(t);
+
+        // Compute third-person target
+        const distanceInFront = cameraRange;
+        const tpTargetPos = targetPositionRef.current;
+        tpTargetPos.set(
+          playerPosition[0] + Math.sin(camera.rotation.y) * distanceInFront,
+          playerPosition[1] + 8 + (cameraRange - 12) * 0.3,
+          playerPosition[2] + Math.cos(camera.rotation.y) * distanceInFront
+        );
+
+        // Interpolate from FPV start pose to third-person target
+        fpvCurrentPosRef.current.copy(tr.startPos).lerp(tpTargetPos, s);
+        camera.position.copy(fpvCurrentPosRef.current);
+        camera.lookAt(playerPosition[0], playerPosition[1], playerPosition[2]);
+
+        const perspCamera = camera as PerspectiveCamera;
+        perspCamera.fov = tr.startFov + (GAME_CONSTANTS.DEFAULT_CAMERA_FOV - tr.startFov) * s;
         perspCamera.updateProjectionMatrix();
-      } else {
-        // Existing third-person logic
+
+        if (t >= 1.0) {
+          tr.active = false;
+          fpvInitializedRef.current = false;
+        }
+        return; // Skip normal third-person update during transition
+      }
+
+      // Reset FPV initialized state when in third person
+      if (!isFirstPersonView) {
+        fpvInitializedRef.current = false;
+      }
+
+      // Existing third-person logic
+      {
         const distanceInFront = cameraRange;
         if (animationStateRef.current.hasCompleted) {
           offsetRef.current.x = Math.sin(camera.rotation.y) * distanceInFront;
