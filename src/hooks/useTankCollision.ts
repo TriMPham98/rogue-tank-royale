@@ -4,6 +4,7 @@ import { Vector3 } from "three";
 import { GAME_CONSTANTS } from "../constants/game";
 import { useGameState } from "../utils/gameState";
 import { getObstacleHash, getEnemyHash } from "../utils/spatialHash";
+import { isWithinMapBoundaries } from "../utils/boundaries";
 
 interface UseTankCollisionOptions {
   tankRadius: number;
@@ -31,9 +32,8 @@ export function useTankCollision({
 
   const checkTerrainCollision = useCallback(
     (newX: number, newZ: number): boolean => {
-      // Check map boundary
-      const mapBoundary = GAME_CONSTANTS.HALF_MAP_SIZE - 1;
-      if (Math.abs(newX) > mapBoundary || Math.abs(newZ) > mapBoundary) {
+      // Check map boundary using centralized utility (behavior preserved for gameplay)
+      if (!isWithinMapBoundaries(newX, newZ)) {
         return true;
       }
 

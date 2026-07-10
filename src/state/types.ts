@@ -96,6 +96,10 @@ export interface GameFlowSlice {
   checkOrientation: () => void;
   setOrientationWarning: (show: boolean) => void;
   toggleFirstPersonView: () => void;
+  /** Spend coins for a field repair (heal). Returns false if unaffordable or already full. */
+  purchaseFieldRepair: () => boolean;
+  /** Spend coins for reinforced plating (+max HP). Returns false if unaffordable. */
+  purchaseReinforcedPlating: () => boolean;
 }
 
 // Safe zone state slice

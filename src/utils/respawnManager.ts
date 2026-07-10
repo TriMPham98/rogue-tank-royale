@@ -3,35 +3,10 @@ import { useGameState, Enemy } from "../utils/gameState";
 import { generateRandomPosition } from "../utils/levelGenerator";
 import { debug } from "../utils/debug";
 import * as THREE from "three"; // Import THREE for Vector2
+import { GAME_CONSTANTS } from "../constants/game";
+import { enforceMapBoundaries } from "./boundaries";
 
 const SPAWN_STATS_DEBUG = false;
-
-// Helper function to keep entities within map boundaries (copied from gameState.ts)
-const enforceMapBoundaries = (
-  position: [number, number, number]
-): [number, number, number] => {
-  const mapSize = 100; // Ground plane size
-  const halfMapSize = mapSize / 2;
-  const buffer = 2; // Buffer from edge
-
-  const constrainedPosition: [number, number, number] = [...position];
-
-  // Constrain X position
-  if (constrainedPosition[0] < -halfMapSize + buffer) {
-    constrainedPosition[0] = -halfMapSize + buffer;
-  } else if (constrainedPosition[0] > halfMapSize - buffer) {
-    constrainedPosition[0] = halfMapSize - buffer;
-  }
-
-  // Constrain Z position
-  if (constrainedPosition[2] < -halfMapSize + buffer) {
-    constrainedPosition[2] = -halfMapSize + buffer;
-  } else if (constrainedPosition[2] > halfMapSize - buffer) {
-    constrainedPosition[2] = halfMapSize - buffer;
-  }
-
-  return constrainedPosition;
-};
 
 // New helper function to generate varied spawn positions
 const generateVariedSpawnPosition = (
@@ -41,8 +16,7 @@ const generateVariedSpawnPosition = (
   maxDistance: number,
   enemyType: "tank" | "turret" | "bomber"
 ): [number, number, number] => {
-  const mapSize = 100;
-  const halfMapSize = mapSize / 2;
+  const halfMapSize = GAME_CONSTANTS.HALF_MAP_SIZE;
 
   // Define spawn zones based on enemy type
   let spawnZone: "edge" | "mid" | "any" = "any";

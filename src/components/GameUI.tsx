@@ -84,6 +84,7 @@ const GameUI = () => {
     playerHealth,
     playerMaxHealth,
     score,
+    coins,
     level: rank,
     enemiesDefeated: targetsEliminated,
     enemiesRequiredForNextLevel: targetsRequiredForPromotion,
@@ -91,6 +92,8 @@ const GameUI = () => {
     isPaused,
     restartGame,
     togglePause,
+    purchaseFieldRepair,
+    purchaseReinforcedPlating,
     showUpgradeUI: showEnhancementUI,
     availableUpgrades: availableEnhancements,
     upgradeStat: applyEnhancement,
@@ -491,6 +494,7 @@ const GameUI = () => {
         playerHealth={playerHealth}
         playerMaxHealth={playerMaxHealth}
         score={score}
+        coins={coins}
         rank={rank}
         targetsEliminated={targetsEliminated}
         targetsRequiredForPromotion={targetsRequiredForPromotion}
@@ -538,9 +542,14 @@ const GameUI = () => {
         !showWeaponSelection &&
         !showSettings && (
           <PauseMenu
+            coins={coins}
+            playerHealth={playerHealth}
+            playerMaxHealth={playerMaxHealth}
             onResume={togglePause}
             onMainMenu={handleReturnToMenuClick}
             onSettings={handleOpenSettings}
+            onPurchaseRepair={purchaseFieldRepair}
+            onPurchasePlating={purchaseReinforcedPlating}
           />
         )}
       {showSettings && (
@@ -566,7 +575,7 @@ const GameUI = () => {
           {!isMobile && (
             <>
               <span>[WASD] Move</span> | <span>[J/K] Aim</span> |{" "}
-              <span>[V] View</span> | <span>[ESC] Pause</span>
+              <span>[V] FPV</span> | <span>[ESC] Pause / Supply</span>
             </>
           )}
         </div>

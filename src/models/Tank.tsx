@@ -6,7 +6,6 @@ import { useKeyboardControls } from "../hooks/useKeyboardControls";
 import { useGameState, SecondaryWeapon } from "../utils/gameState";
 import { debug } from "../utils/debug";
 import { useSound, resetSoundTimer } from "../utils/sound";
-import Projectile from "./Projectile";
 import SniperRifle from "./SniperRifle";
 import Shotgun from "./Shotgun";
 import LaserWeapon from "./LaserWeapon";
@@ -15,7 +14,7 @@ import TeslaCoil from "./TeslaCoil";
 import { WeaponInstance } from "../utils/weapons";
 import { GAME_CONSTANTS } from "../constants/game";
 import { useTankCollision } from "../hooks/useTankCollision";
-import { useProjectileManager } from "../hooks/useProjectileManager";
+import { usePooledProjectiles } from "../hooks/usePooledProjectiles";
 
 interface TankProps {
   position: [number, number, number];
@@ -57,13 +56,9 @@ const Tank = ({ position = [0, 0, 0], isFirstPerson = false }: TankProps) => {
   const { checkTerrainCollision } = useTankCollision({
     tankRadius: GAME_CONSTANTS.TANK_RADIUS,
   });
-  const {
-    projectiles,
-    spawnProjectile,
-    removeProjectile,
-    canShoot,
-    recordShot,
-  } = useProjectileManager();
+  const { spawnProjectile, canShoot, recordShot } = usePooledProjectiles({
+    isEnemy: false,
+  });
 
   // Memoized Vector3 objects to avoid creating new ones every frame
   const tempVectors = useMemo(() => ({
@@ -90,7 +85,6 @@ const Tank = ({ position = [0, 0, 0], isFirstPerson = false }: TankProps) => {
     playerSpeed,
     playerFireRate,
     playerHealthRegen,
-    playerPenetration,
     isPaused,
     isGameOver,
     updatePlayerPosition,
@@ -282,7 +276,8 @@ const Tank = ({ position = [0, 0, 0], isFirstPerson = false }: TankProps) => {
       ];
       spawnProjectile(
         shootPosition,
-        tankRotationRef.current + turretRotationRef.current
+        tankRotationRef.current + turretRotationRef.current,
+        playerTurretDamage
       );
       recordShot(currentTime);
 
@@ -671,18 +666,6 @@ const Tank = ({ position = [0, 0, 0], isFirstPerson = false }: TankProps) => {
           )}
         </group>
       </group>
-
-      {projectiles.map((projectile) => (
-        <Projectile
-          key={projectile.id}
-          id={projectile.id}
-          position={projectile.position}
-          rotation={projectile.rotation}
-          damage={playerTurretDamage}
-          penetrationPower={playerPenetration}
-          onRemove={removeProjectile}
-        />
-      ))}
 
       {renderedSideWeapons}
     </>

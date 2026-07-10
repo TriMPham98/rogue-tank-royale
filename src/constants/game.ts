@@ -27,6 +27,12 @@ export const GAME_CONSTANTS = {
   // Combat
   COIN_DROP_CHANCE: 0.05,
   DEFAULT_COIN_VALUE: 1,
+  /** Pause-menu field repair cost (coins) */
+  COIN_REPAIR_COST: 5,
+  /** Pause-menu max-health kit cost (coins) */
+  COIN_PLATING_COST: 12,
+  /** Max health granted by plating purchase */
+  COIN_PLATING_MAX_HEALTH: 15,
   HEALTH_PACK_HEAL_AMOUNT: 25,
   BOMBER_EXPLOSION_DAMAGE: 25,
   BOMBER_EXPLOSION_RANGE: 2,
@@ -74,13 +80,13 @@ export const GAME_CONSTANTS = {
   FIRST_PERSON_FOV: 75,
 
   // First-person view (anti-nausea)
-  FPV_FOV: 62,
-  FPV_EYE_HEIGHT: 1.2,
-  FPV_FORWARD_OFFSET: 0.3,
+  FPV_FOV: 65,
+  FPV_EYE_HEIGHT: 2.0,
+  FPV_FORWARD_OFFSET: -0.5,
   FPV_POSITION_LERP_FACTOR: 4.0,
   FPV_ROTATION_LERP_FACTOR: 6.0,
   FPV_TRANSITION_DURATION: 0.5,
-  FPV_PITCH_ANGLE: -0.05,
+  FPV_PITCH_ANGLE: -0.08,
   FPV_LOOK_AHEAD_DISTANCE: 10.0,
 
   // Weapon positioning

@@ -2,30 +2,7 @@
 import type { StateCreator } from "zustand";
 import type { GameState, PlayerSlice, UpgradeableStat } from "./types";
 import { GAME_CONSTANTS } from "../constants/game";
-
-// Helper function to keep entities within map boundaries
-const enforceMapBoundaries = (
-  position: [number, number, number]
-): [number, number, number] => {
-  const halfMapSize = GAME_CONSTANTS.HALF_MAP_SIZE;
-  const buffer = GAME_CONSTANTS.MAP_BOUNDARY_BUFFER;
-
-  const constrainedPosition: [number, number, number] = [...position];
-
-  if (constrainedPosition[0] < -halfMapSize + buffer) {
-    constrainedPosition[0] = -halfMapSize + buffer;
-  } else if (constrainedPosition[0] > halfMapSize - buffer) {
-    constrainedPosition[0] = halfMapSize - buffer;
-  }
-
-  if (constrainedPosition[2] < -halfMapSize + buffer) {
-    constrainedPosition[2] = -halfMapSize + buffer;
-  } else if (constrainedPosition[2] > halfMapSize - buffer) {
-    constrainedPosition[2] = halfMapSize - buffer;
-  }
-
-  return constrainedPosition;
-};
+import { enforceMapBoundaries } from "../utils/boundaries";
 
 export const createPlayerSlice: StateCreator<
   GameState,
@@ -92,7 +69,7 @@ export const createPlayerSlice: StateCreator<
         case "tankSpeed":
           updates.playerSpeed = state.playerSpeed + 0.5;
           break;
-        case "fireRate":
+        case "fireRate": {
           const currentShotsPerSecond = 1 / state.playerFireRate;
           const newShotsPerSecond = currentShotsPerSecond + 0.1;
           const cappedShotsPerSecond = Math.min(
@@ -101,6 +78,7 @@ export const createPlayerSlice: StateCreator<
           );
           updates.playerFireRate = 1 / cappedShotsPerSecond;
           break;
+        }
         case "cameraRange":
           updates.playerCameraRange = state.playerCameraRange + 2;
           break;
@@ -111,7 +89,7 @@ export const createPlayerSlice: StateCreator<
         case "healthRegen":
           updates.playerHealthRegen = state.playerHealthRegen + 0.5;
           break;
-        case "turretDamage":
+        case "turretDamage": {
           const tankBaseHealth = GAME_CONSTANTS.ENEMY_TANK_BASE_HEALTH;
           const linearHealthScale = GAME_CONSTANTS.ENEMY_HEALTH_SCALE_PER_LEVEL;
           const currentTankHealth =
@@ -123,6 +101,7 @@ export const createPlayerSlice: StateCreator<
           updates.playerTurretDamage =
             state.playerTurretDamage + damageIncrease;
           break;
+        }
         case "bulletVelocity":
           updates.playerBulletVelocity = state.playerBulletVelocity + 2;
           break;

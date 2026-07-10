@@ -97,6 +97,7 @@ export class FPSTracker {
    * @param isLevelChange - Whether this log is triggered by a level change
    */
   private logFPS(isLevelChange: boolean = false): void {
+    if (!import.meta.env.DEV) return;
     const metrics = this.getMetrics();
 
     const logTitle = isLevelChange

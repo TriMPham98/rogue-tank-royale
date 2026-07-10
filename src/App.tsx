@@ -90,9 +90,11 @@ function AppContent() {
 
       // Debug key for testing level progression (press 'L' to level up)
       if ((e.key === "l" || e.key === "L") && e.shiftKey) {
-        debug.log(
-          `Advancing level from ${level} to ${level + 1} for lighting test`
-        );
+        if (import.meta.env.DEV) {
+          console.log(
+            `Advancing level from ${level} to ${level + 1} for lighting test`
+          );
+        }
         advanceLevel();
 
         // Generate new level enemies
@@ -105,49 +107,55 @@ function AppContent() {
 
       // FPS debugging keys
       if ((e.key === "f" || e.key === "F") && e.shiftKey) {
-        // Shift+F: Show current FPS immediately
-        const metrics = globalFPSTracker.getMetrics();
-        const currentLevel = globalFPSTracker.getCurrentLevel();
-        const weaponCount = globalFPSTracker.getSecondaryWeaponCount();
-        console.log(
-          `🎯 Level ${currentLevel} | ${weaponCount} Weapons | FPS: ${metrics.fps} | Frame Time: ${metrics.averageFrameTime}ms`
-        );
+        // Shift+F: Show current FPS immediately (dev only)
+        if (import.meta.env.DEV) {
+          const metrics = globalFPSTracker.getMetrics();
+          const currentLevel = globalFPSTracker.getCurrentLevel();
+          const weaponCount = globalFPSTracker.getSecondaryWeaponCount();
+          console.log(
+            `🎯 Level ${currentLevel} | ${weaponCount} Weapons | FPS: ${metrics.fps} | Frame Time: ${metrics.averageFrameTime}ms`
+          );
+        }
       }
 
       if ((e.key === "p" || e.key === "P") && e.shiftKey) {
         // Shift+P: Force log current performance (since automatic logging only happens on level changes)
-        const metrics = globalFPSTracker.getMetrics();
-        const currentLevel = globalFPSTracker.getCurrentLevel();
-        const weaponCount = globalFPSTracker.getSecondaryWeaponCount();
+        if (import.meta.env.DEV) {
+          const metrics = globalFPSTracker.getMetrics();
+          const currentLevel = globalFPSTracker.getCurrentLevel();
+          const weaponCount = globalFPSTracker.getSecondaryWeaponCount();
 
-        console.group(`🎮 Manual Performance Check - Level ${currentLevel}`);
-        console.log(`🎯 Level: ${currentLevel}`);
-        console.log(`🔫 Secondary Weapons: ${weaponCount}`);
-        console.log(`📊 Average FPS: ${metrics.fps}`);
-        console.log(`⏱️  Average Frame Time: ${metrics.averageFrameTime}ms`);
-        console.log(`🚀 Best Frame Time: ${metrics.minFrameTime}ms`);
-        console.log(`🐌 Worst Frame Time: ${metrics.maxFrameTime}ms`);
-        console.log(`📈 Frames Sampled: ${metrics.frameCount}`);
+          console.group(`🎮 Manual Performance Check - Level ${currentLevel}`);
+          console.log(`🎯 Level: ${currentLevel}`);
+          console.log(`🔫 Secondary Weapons: ${weaponCount}`);
+          console.log(`📊 Average FPS: ${metrics.fps}`);
+          console.log(`⏱️  Average Frame Time: ${metrics.averageFrameTime}ms`);
+          console.log(`🚀 Best Frame Time: ${metrics.minFrameTime}ms`);
+          console.log(`🐌 Worst Frame Time: ${metrics.maxFrameTime}ms`);
+          console.log(`📈 Frames Sampled: ${metrics.frameCount}`);
 
-        // Performance assessment
-        if (metrics.fps >= 55) {
-          console.log("✅ Performance: Excellent");
-        } else if (metrics.fps >= 45) {
-          console.log("🟡 Performance: Good");
-        } else if (metrics.fps >= 30) {
-          console.log("🟠 Performance: Fair");
-        } else {
-          console.log("🔴 Performance: Poor");
+          // Performance assessment
+          if (metrics.fps >= 55) {
+            console.log("✅ Performance: Excellent");
+          } else if (metrics.fps >= 45) {
+            console.log("🟡 Performance: Good");
+          } else if (metrics.fps >= 30) {
+            console.log("🟠 Performance: Fair");
+          } else {
+            console.log("🔴 Performance: Poor");
+          }
+
+          console.groupEnd();
         }
-
-        console.groupEnd();
       }
 
       if ((e.key === "h" || e.key === "H") && e.shiftKey) {
         // Shift+H: Toggle FPS display visibility
         setShowFPSDisplay((prev) => {
           const newValue = !prev;
-          console.log(`👁️ FPS display ${newValue ? "shown" : "hidden"}`);
+          if (import.meta.env.DEV) {
+            console.log(`👁️ FPS display ${newValue ? "shown" : "hidden"}`);
+          }
           return newValue;
         });
       }

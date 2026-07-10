@@ -2,7 +2,7 @@
  * InstancedMesh-based health bar renderer
  * Renders all enemy health bars using just 2 draw calls (background + foreground)
  */
-import { useRef, useMemo, useEffect } from "react";
+import { useRef, useMemo } from "react";
 import { useFrame } from "@react-three/fiber";
 import {
   InstancedMesh,
@@ -12,7 +12,7 @@ import {
   Color,
 } from "three";
 import { useGameState } from "../utils/gameState";
-import { shallow } from "zustand/shallow";
+import { getEnemyVisualPosition } from "../utils/enemyVisualPositions";
 
 const BAR_WIDTH = 1;
 const BAR_HEIGHT = 0.1;
@@ -21,11 +21,12 @@ const BAR_DEPTH = 0.1;
 const BG_COLOR = new Color("red");
 const FG_COLOR = new Color("lime");
 
-// Height offsets for different enemy types
-const HEIGHT_OFFSETS = {
+// Height offsets for different enemy types (must match EnemyTank mesh layout)
+const HEIGHT_OFFSETS: Record<string, number> = {
   tank: 1.2,
   turret: 1.5,
-  bomber: 0.7, // bomberBaseHeight + bomberCockpitSize * 0.5 + 0.2
+  // bomberBaseHeight(0.3) + bomberCockpitSize(0.8)*0.5 + 0.2
+  bomber: 0.9,
 };
 
 interface InstancedHealthBarsProps {
@@ -36,13 +37,18 @@ const InstancedHealthBars = ({ maxEnemies = 25 }: InstancedHealthBarsProps) => {
   const bgMeshRef = useRef<InstancedMesh>(null);
   const fgMeshRef = useRef<InstancedMesh>(null);
   const tempObject = useMemo(() => new Object3D(), []);
-
-  const enemies = useGameState((state) => state.enemies, shallow);
   const maxHealthCache = useRef<Map<string, number>>(new Map());
+  const getState = useRef(useGameState.getState).current;
 
-  // Create geometry and materials
-  const bgGeometry = useMemo(() => new BoxGeometry(BAR_WIDTH, BAR_HEIGHT, BAR_DEPTH), []);
-  const fgGeometry = useMemo(() => new BoxGeometry(1, BAR_HEIGHT, BAR_DEPTH), []);
+  // Create geometry and materials once
+  const bgGeometry = useMemo(
+    () => new BoxGeometry(BAR_WIDTH, BAR_HEIGHT, BAR_DEPTH),
+    []
+  );
+  const fgGeometry = useMemo(
+    () => new BoxGeometry(1, BAR_HEIGHT, BAR_DEPTH),
+    []
+  );
 
   const bgMaterial = useMemo(
     () =>
@@ -64,40 +70,33 @@ const InstancedHealthBars = ({ maxEnemies = 25 }: InstancedHealthBarsProps) => {
     []
   );
 
-  // Track max health for each enemy
-  useEffect(() => {
-    for (const enemy of enemies) {
-      if (!maxHealthCache.current.has(enemy.id)) {
-        maxHealthCache.current.set(enemy.id, enemy.health);
-      }
-    }
-
-    // Clean up removed enemies
-    const currentIds = new Set(enemies.map((e) => e.id));
-    for (const id of maxHealthCache.current.keys()) {
-      if (!currentIds.has(id)) {
-        maxHealthCache.current.delete(id);
-      }
-    }
-  }, [enemies]);
-
-  // Update health bars every frame
+  // Update health bars every frame from live store (avoids React re-renders on moves)
   useFrame(() => {
     if (!bgMeshRef.current || !fgMeshRef.current) return;
+
+    const enemies = getState().enemies;
+    const cache = maxHealthCache.current;
+    const currentIds = new Set<string>();
 
     let index = 0;
     for (const enemy of enemies) {
       if (index >= maxEnemies) break;
+      currentIds.add(enemy.id);
 
-      const maxHealth = maxHealthCache.current.get(enemy.id) || enemy.health;
+      if (!cache.has(enemy.id)) {
+        cache.set(enemy.id, enemy.health);
+      }
+
+      const maxHealth = cache.get(enemy.id) || enemy.health;
       const healthPercent = Math.max(0, Math.min(1, enemy.health / maxHealth));
       const heightOffset = HEIGHT_OFFSETS[enemy.type] || 1.2;
+      const visual = getEnemyVisualPosition(enemy.id) ?? enemy.position;
 
       // Background bar (full width)
       tempObject.position.set(
-        enemy.position[0],
-        enemy.position[1] + heightOffset,
-        enemy.position[2]
+        visual[0],
+        visual[1] + heightOffset,
+        visual[2]
       );
       tempObject.scale.set(1, 1, 1);
       tempObject.updateMatrix();
@@ -105,15 +104,22 @@ const InstancedHealthBars = ({ maxEnemies = 25 }: InstancedHealthBarsProps) => {
 
       // Foreground bar (scaled by health percent)
       tempObject.position.set(
-        enemy.position[0] - (1 - healthPercent) * BAR_WIDTH * 0.5,
-        enemy.position[1] + heightOffset,
-        enemy.position[2] + 0.001 // Slight offset to prevent z-fighting
+        visual[0] - (1 - healthPercent) * BAR_WIDTH * 0.5,
+        visual[1] + heightOffset,
+        visual[2] + 0.001
       );
       tempObject.scale.set(healthPercent, 1, 1);
       tempObject.updateMatrix();
       fgMeshRef.current.setMatrixAt(index, tempObject.matrix);
 
       index++;
+    }
+
+    // Drop cache entries for despawned enemies
+    for (const id of cache.keys()) {
+      if (!currentIds.has(id)) {
+        cache.delete(id);
+      }
     }
 
     // Hide unused instances

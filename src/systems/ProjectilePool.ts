@@ -74,7 +74,11 @@ class ProjectilePool {
     const projectile = pool.find((p) => !p.active);
     if (!projectile) {
       // Pool exhausted - could expand here if needed
-      console.warn(`Projectile pool exhausted for ${isEnemy ? "enemy" : "player"} projectiles`);
+      if (import.meta.env.DEV) {
+        console.warn(
+          `Projectile pool exhausted for ${isEnemy ? "enemy" : "player"} projectiles`
+        );
+      }
       return null;
     }
 

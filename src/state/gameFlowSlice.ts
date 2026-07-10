@@ -8,6 +8,8 @@ import { initialPlayerState } from "./playerSlice";
 import { initialEnemyState } from "./enemySlice";
 import { initialWeaponState } from "./weaponSlice";
 import { initialTerrainState } from "./terrainSlice";
+import { resetProjectilePool } from "../systems/ProjectilePool";
+import { clearAllEnemyVisualPositions } from "../utils/enemyVisualPositions";
 
 export const createGameFlowSlice: StateCreator<
   GameState,
@@ -43,6 +45,8 @@ export const createGameFlowSlice: StateCreator<
   restartGame: () => {
     SoundManager.setVolume("deployTank", 0.55);
     SoundManager.play("deployTank");
+    resetProjectilePool();
+    clearAllEnemyVisualPositions();
 
     return set({
       ...initialPlayerState,
@@ -77,7 +81,9 @@ export const createGameFlowSlice: StateCreator<
       isPaused: false,
     })),
 
-  returnToMainMenu: () =>
+  returnToMainMenu: () => {
+    resetProjectilePool();
+    clearAllEnemyVisualPositions();
     set({
       ...initialPlayerState,
       ...initialEnemyState,
@@ -105,7 +111,8 @@ export const createGameFlowSlice: StateCreator<
       moveZ: 0,
       turretRotation: null,
       isFiring: false,
-    }),
+    });
+  },
 
   incrementEnemyDefeatCount: () => {
     set((state) => {
@@ -158,7 +165,7 @@ export const createGameFlowSlice: StateCreator<
       // Generate upgrades
       let availableUpgrades: UpgradeableStat[] = [];
       if (newLevel <= GAME_CONSTANTS.UPGRADE_UI_MAX_LEVEL) {
-        let possibleUpgrades: UpgradeableStat[] = [
+        const possibleUpgrades: UpgradeableStat[] = [
           "tankSpeed",
           "maxHealth",
           "healthRegen",
@@ -250,6 +257,40 @@ export const createGameFlowSlice: StateCreator<
 
   toggleFirstPersonView: () =>
     set((state) => ({ isFirstPersonView: !state.isFirstPersonView })),
+
+  purchaseFieldRepair: () => {
+    const state = get();
+    const cost = GAME_CONSTANTS.COIN_REPAIR_COST;
+    if (state.coins < cost) return false;
+    if (state.playerHealth >= state.playerMaxHealth) return false;
+
+    set({
+      coins: state.coins - cost,
+      playerHealth: Math.min(
+        state.playerMaxHealth,
+        state.playerHealth + GAME_CONSTANTS.HEALTH_PACK_HEAL_AMOUNT
+      ),
+    });
+    SoundManager.setVolume("healthPickUp", 0.35);
+    SoundManager.play("healthPickUp");
+    return true;
+  },
+
+  purchaseReinforcedPlating: () => {
+    const state = get();
+    const cost = GAME_CONSTANTS.COIN_PLATING_COST;
+    if (state.coins < cost) return false;
+
+    const plating = GAME_CONSTANTS.COIN_PLATING_MAX_HEALTH;
+    set({
+      coins: state.coins - cost,
+      playerMaxHealth: state.playerMaxHealth + plating,
+      playerHealth: state.playerHealth + plating,
+    });
+    SoundManager.setVolume("levelUp", 0.35);
+    SoundManager.play("levelUp");
+    return true;
+  },
 });
 
 // Initial game flow state for reset

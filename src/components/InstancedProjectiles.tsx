@@ -14,6 +14,7 @@ import {
 import { useGameState } from "../utils/gameState";
 import { getProjectilePool, resetProjectilePool, PooledProjectile } from "../systems/ProjectilePool";
 import { getObstacleHash } from "../utils/spatialHash";
+import { GAME_CONSTANTS } from "../constants/game";
 
 const PLAYER_PROJECTILE_COLOR = new Color("yellow");
 const PLAYER_PROJECTILE_EMISSIVE = new Color("orange");
@@ -22,7 +23,6 @@ const ENEMY_PROJECTILE_EMISSIVE = new Color("red");
 
 const PLAYER_RADIUS = 0.25;
 const ENEMY_RADIUS = 0.2;
-const MAP_SIZE = 50;
 const MAX_DISTANCE = 50;
 const ENEMY_SPEED = 12;
 const PLAYER_COLLISION_RADIUS = 1.8;
@@ -121,7 +121,7 @@ const InstancedProjectiles = ({
       const newZ = projectile.position[2] + Math.cos(projectile.rotation) * delta * velocity;
 
       // Check map boundaries
-      if (Math.abs(newX) > MAP_SIZE || Math.abs(newZ) > MAP_SIZE) {
+      if (Math.abs(newX) > GAME_CONSTANTS.HALF_MAP_SIZE || Math.abs(newZ) > GAME_CONSTANTS.HALF_MAP_SIZE) {
         pool.release(projectile);
         continue;
       }
@@ -200,7 +200,7 @@ const InstancedProjectiles = ({
       const newZ = projectile.position[2] + Math.cos(projectile.rotation) * delta * ENEMY_SPEED;
 
       // Check map boundaries
-      if (Math.abs(newX) > MAP_SIZE || Math.abs(newZ) > MAP_SIZE) {
+      if (Math.abs(newX) > GAME_CONSTANTS.HALF_MAP_SIZE || Math.abs(newZ) > GAME_CONSTANTS.HALF_MAP_SIZE) {
         pool.release(projectile);
         continue;
       }

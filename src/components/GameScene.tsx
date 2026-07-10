@@ -26,6 +26,8 @@ import { globalFPSTracker } from "../utils/fpsTracker";
 import MobileJoysticks from "../components/MobileJoysticks";
 import { GAME_CONSTANTS } from "../constants/game";
 import { useObstacleSpatialHash, useEnemySpatialHash, resetSpatialHashes } from "../hooks/useSpatialHash";
+import InstancedProjectiles from "./InstancedProjectiles";
+import InstancedHealthBars from "./InstancedHealthBars";
 
 // Custom hook to calculate light intensity based on game level
 const useLightIntensity = () => {
@@ -240,7 +242,9 @@ const FollowCamera = memo(() => {
         state.shouldResetCameraAnimation &&
         !prevState.shouldResetCameraAnimation
       ) {
-        console.log("FollowCamera: Resetting animation state due to flag.");
+        if (import.meta.env.DEV) {
+          console.log("FollowCamera: Resetting animation state due to flag.");
+        }
         // Reset animation state
         setIsIntroPanComplete(false);
         introPanTimeRef.current = 0;
@@ -277,11 +281,15 @@ const FollowCamera = memo(() => {
             perspCamera.updateProjectionMatrix();
           }
           camera.rotation.x = -0.2 - Math.PI / 8; // Match initial rotation offset
-          console.log("FollowCamera: Forced camera to initial state.");
+          if (import.meta.env.DEV) {
+            console.log("FollowCamera: Forced camera to initial state.");
+          }
         } else {
-          console.warn(
-            "FollowCamera: Cannot force initial state, player position unknown during reset."
-          );
+          if (import.meta.env.DEV) {
+            console.warn(
+              "FollowCamera: Cannot force initial state, player position unknown during reset."
+            );
+          }
         }
 
         // Reset the flag in global state AFTER applying changes
@@ -694,6 +702,9 @@ const SceneContent = memo((): JSX.Element => {
       {enemies.map((enemy) => (
         <EnemyTank key={`enemy-${enemy.id}`} enemy={enemy} />
       ))}
+      {/* Primary cannon projectiles + enemy health bars (instanced draw calls) */}
+      <InstancedProjectiles />
+      <InstancedHealthBars maxEnemies={GAME_CONSTANTS.MAX_ENEMIES + 5} />
       {powerUps.map((powerUp) => (
         <PowerUpItem key={`powerup-${powerUp.id}`} powerUp={powerUp} />
       ))}

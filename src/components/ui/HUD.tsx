@@ -5,6 +5,7 @@ interface HUDProps {
   playerHealth: number;
   playerMaxHealth: number;
   score: number;
+  coins: number;
   rank: number;
   targetsEliminated: number;
   targetsRequiredForPromotion: number;
@@ -15,6 +16,7 @@ const HUD: React.FC<HUDProps> = ({
   playerHealth,
   playerMaxHealth,
   score,
+  coins,
   rank,
   targetsEliminated,
   targetsRequiredForPromotion,
@@ -57,6 +59,10 @@ const HUD: React.FC<HUDProps> = ({
       <div className="hud-element combat-score">
         <div className="hud-label">COMBAT SCORE</div>
         <div className="score-value">{score}</div>
+      </div>
+      <div className="hud-element coin-balance-hud">
+        <div className="hud-label">SUPPLY</div>
+        <div className="score-value">{coins}¢</div>
       </div>
       <div className="hud-element rank-progression">
         <div className="hud-label">

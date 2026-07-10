@@ -1,6 +1,7 @@
 import { Enemy, PowerUp, useGameState } from "./gameState";
 import { debug } from "./debug";
 import * as THREE from "three"; // Import THREE for Vector2
+import { isWithinMapBoundaries } from "./boundaries";
 
 interface LevelConfig {
   gridSize: number;
@@ -29,22 +30,6 @@ const isPositionClear = (
     }
   }
   return true;
-};
-
-// Helper function to check if a position is within map boundaries
-const isWithinMapBoundaries = (
-  x: number,
-  z: number,
-  mapSize: number = 100
-): boolean => {
-  const halfMapSize = mapSize / 2;
-  const buffer = 2;
-  return (
-    x >= -halfMapSize + buffer &&
-    x <= halfMapSize - buffer &&
-    z >= -halfMapSize + buffer &&
-    z <= halfMapSize - buffer
-  );
 };
 
 // Generate a random position on the grid, ensuring it's not too close to other entities or obstacles

@@ -20,7 +20,20 @@ export const STAT_UPGRADE_INCREMENTS: Record<
   penetration: { amount: 1, maxValue: 3 }, // Reduced max value to 3 but kept increment at 1
 };
 
-// Calculate enhanced weapon range based on camera sensor upgrades
+/**
+ * Calculate enhanced weapon range based on camera sensor upgrades.
+ *
+ * Sensor Range (cameraRange) starts at the initial value of 8.
+ * Each upgrade adds +2 to cameraRange (see STAT_UPGRADE_INCREMENTS).
+ * The number of sensor upgrades applied = max(0, (currentCameraRange - 8) / 2).
+ *
+ * Each sensor upgrade provides a 15% multiplicative bonus to weapon/secondary range.
+ * Example: 1 upgrade (camera=10) => +15% range; 2 upgrades (camera=12) => +30% range, etc.
+ *
+ * @param baseRange - The weapon's base range value
+ * @param playerCameraRange - The player's current sensor/camera range stat
+ * @returns The enhanced range, rounded to 1 decimal place
+ */
 export const calculateEnhancedWeaponRange = (
   baseRange: number,
   playerCameraRange: number
@@ -131,13 +144,14 @@ export const getStatPostUpgradeValue = (
   switch (stat) {
     case "tankSpeed":
       return `${(playerSpeed + increment.amount).toFixed(1)} m/s`;
-    case "fireRate":
+    case "fireRate": {
       const currentRPS = 1 / playerFireRate;
       const newRPS = Math.min(
         increment.maxValue || Infinity,
         currentRPS + increment.amount
       );
       return `${newRPS.toFixed(1)} rps`;
+    }
     case "cameraRange":
       return `${(playerCameraRange + increment.amount).toFixed(0)}m`;
     case "maxHealth":
@@ -164,7 +178,7 @@ export const getStatDescription = (stat: UpgradeableStat): string => {
     case "fireRate":
       return "Optimize loading mechanism for increased rounds per second.";
     case "cameraRange":
-      return "Upgrade sensor suite for extended tactical awareness and secondary weapon range.";
+      return "Upgrade sensor suite for extended tactical awareness (+15% secondary weapon range per upgrade).";
     case "maxHealth":
       return "Reinforce hull structure, increasing damage tolerance.";
     case "healthRegen":

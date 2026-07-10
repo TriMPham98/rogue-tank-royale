@@ -693,6 +693,49 @@
   min-width: 400px;
 }
 
+/* Field supply (coin sink) on pause menu */
+.military-theme .field-supply {
+  width: 100%;
+  margin: 0 0 1.25rem;
+  padding: 0.75rem 0.5rem 0.25rem;
+  border: 1px solid rgba(80, 120, 80, 0.35);
+  border-radius: 4px;
+  background: rgba(10, 18, 10, 0.55);
+}
+
+.military-theme .field-supply-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  color: #8fbf8f;
+  margin-bottom: 0.6rem;
+  padding: 0 0.25rem;
+}
+
+.military-theme .field-supply-header .coin-balance {
+  color: #ffd54a;
+  font-weight: 600;
+}
+
+.military-theme .supply-button {
+  width: 100%;
+  margin-bottom: 0.5rem;
+  font-size: 0.8rem;
+  padding: 0.55rem 0.75rem;
+}
+
+.military-theme .supply-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  filter: grayscale(0.4);
+}
+
+.military-theme .coin-balance-hud .score-value {
+  color: #ffd54a;
+}
+
 /* Game Over / Mission Failed Overlay */
 .military-theme .game-over-overlay {
   background-color: rgba(10, 15, 10, 0.95);

@@ -1,13 +1,16 @@
-import { useRef, useState, useEffect, useCallback, useMemo } from "react";
+import { useRef, useMemo, useEffect } from "react";
 import { useFrame } from "@react-three/fiber";
 import { Box, Cylinder, Sphere } from "@react-three/drei";
 import { Vector3, Group, Quaternion, MeshStandardMaterial } from "three";
 import { Enemy, useGameState } from "../utils/gameState";
-import Projectile from "./Projectile";
 import { debug } from "../utils/debug";
 import { GAME_CONSTANTS } from "../constants/game";
 import { useTankCollision } from "../hooks/useTankCollision";
-import { useProjectileManager } from "../hooks/useProjectileManager";
+import { usePooledProjectiles } from "../hooks/usePooledProjectiles";
+import {
+  setEnemyVisualPosition,
+  clearEnemyVisualPosition,
+} from "../utils/enemyVisualPositions";
 
 interface EnemyTankProps {
   enemy: Enemy;
@@ -30,13 +33,11 @@ const EnemyTank = ({ enemy }: EnemyTankProps) => {
     tankRadius,
     enemyId: enemy.id,
   });
-  const {
-    projectiles,
-    spawnProjectile,
-    removeProjectile,
-    canShoot,
-    recordShot,
-  } = useProjectileManager();
+  const { spawnProjectile, canShoot, recordShot } = usePooledProjectiles({
+    isEnemy: true,
+    defaultDamage: 5,
+    defaultVelocity: 12,
+  });
 
   // Memoized Vector3 objects to avoid creating new ones every frame
   const tempVectors = useMemo(() => ({
@@ -56,8 +57,6 @@ const EnemyTank = ({ enemy }: EnemyTankProps) => {
   }), []);
   const tempQuat = useMemo(() => new Quaternion(), []);
 
-  const [healthPercent, setHealthPercent] = useState(1);
-
   const damageEnemy = useGameState((state) => state.damageEnemy);
   const updateEnemyPosition = useGameState(
     (state) => state.updateEnemyPosition
@@ -66,14 +65,14 @@ const EnemyTank = ({ enemy }: EnemyTankProps) => {
   const isGameOver = useGameState((state) => state.isGameOver);
   const getState = useRef(useGameState.getState).current;
 
-  const maxHealthRef = useRef(enemy.health);
-
   const isTank = enemy.type === "tank";
   const moveSpeed = enemy.speed || (isBomber ? GAME_CONSTANTS.ENEMY_BOMBER_BASE_SPEED : GAME_CONSTANTS.ENEMY_TANK_BASE_SPEED);
 
   useEffect(() => {
-    maxHealthRef.current = enemy.health;
-  }, []);
+    return () => {
+      clearEnemyVisualPosition(enemy.id);
+    };
+  }, [enemy.id]);
 
   useFrame((state, delta) => {
     if (isPaused || isGameOver || !tankRef.current) return;
@@ -83,19 +82,20 @@ const EnemyTank = ({ enemy }: EnemyTankProps) => {
     const playerTankPosition = getState().playerTankPosition;
     if (!playerTankPosition) return;
 
-    // --- Health Update ---
+    // --- Alive check ---
     const enemies = getState().enemies;
     const currentEnemy = enemies.find((e) => e.id === enemy.id);
-    if (currentEnemy) {
-      const newHealthPercent = currentEnemy.health / maxHealthRef.current;
-      if (newHealthPercent !== healthPercent) {
-        setHealthPercent(newHealthPercent);
-      }
-    } else {
+    if (!currentEnemy) {
       return;
     }
 
     const currentPositionVec = tankRef.current.position;
+    // Keep health-bar positions accurate even when not moving / throttled in store
+    setEnemyVisualPosition(enemy.id, [
+      currentPositionVec.x,
+      currentPositionVec.y,
+      currentPositionVec.z,
+    ]);
     tempVectors.playerPos.set(playerTankPosition[0], playerTankPosition[1], playerTankPosition[2]);
 
     tempVectors.directionToPlayer
@@ -145,7 +145,16 @@ const EnemyTank = ({ enemy }: EnemyTankProps) => {
           tempVectors.shootDirection.z
         );
 
-        spawnProjectile(shootPosition, projectileRotation);
+        // Scale damage with player progression (matches prior EnemyTank tiers)
+        const playerLevel = getState().playerLevel;
+        let damage = 5;
+        if (playerLevel > 15) damage = 10;
+        if (playerLevel > 25) damage = 15;
+        if (playerLevel > 40) damage = 20;
+        if (playerLevel > 50) damage = 25;
+        if (playerLevel > 60) damage = 30;
+
+        spawnProjectile(shootPosition, projectileRotation, damage, 12);
         recordShot(currentTime);
         debug.log(`Enemy ${enemy.id} (${enemy.type}) fired at player`);
       }
@@ -259,12 +268,15 @@ const EnemyTank = ({ enemy }: EnemyTankProps) => {
               0.2 + Math.sin(state.clock.getElapsedTime() * 4) * 0.1;
           }
 
+          const newPosition: [number, number, number] = [
+            tankRef.current.position.x,
+            tankRef.current.position.y,
+            tankRef.current.position.z,
+          ];
+          // Always track visual position for instanced health bars
+          setEnemyVisualPosition(enemy.id, newPosition);
+          // Throttle Zustand writes to avoid re-rendering the full enemy list every frame
           if (Math.random() < 0.1) {
-            const newPosition: [number, number, number] = [
-              tankRef.current.position.x,
-              tankRef.current.position.y,
-              tankRef.current.position.z,
-            ];
             updateEnemyPosition(enemy.id, newPosition);
           }
         }
@@ -320,13 +332,6 @@ const EnemyTank = ({ enemy }: EnemyTankProps) => {
     }
   });
 
-  const handleHit = useCallback(
-    (damage: number) => {
-      damageEnemy(enemy.id, damage);
-    },
-    [damageEnemy, enemy.id]
-  );
-
   const bomberBaseRadius = 1.2;
   const bomberBaseBottomRadius = 1.4;
   const bomberBaseHeight = 0.3;
@@ -351,8 +356,7 @@ const EnemyTank = ({ enemy }: EnemyTankProps) => {
               ]}
               position={[0, bomberBaseHeight / 2, 0]}
               castShadow
-              receiveShadow
-              onClick={() => handleHit(25)}>
+              receiveShadow>
               <meshStandardMaterial
                 color="#4A4A4A"
                 roughness={0.5}
@@ -367,8 +371,7 @@ const EnemyTank = ({ enemy }: EnemyTankProps) => {
               ]}
               position={[0, bomberBaseHeight + bomberCockpitSize * 0.25, 0]}
               rotation={[0, Math.PI / 4, 0]}
-              castShadow
-              onClick={() => handleHit(25)}>
+              castShadow>
               <meshStandardMaterial
                 color="#FFD700"
                 roughness={0.3}
@@ -388,8 +391,7 @@ const EnemyTank = ({ enemy }: EnemyTankProps) => {
                 -bomberBaseRadius * 0.8,
               ]}
               rotation={[Math.PI / 2, 0, 0]}
-              castShadow
-              onClick={() => handleHit(25)}>
+              castShadow>
               <meshStandardMaterial
                 color="darkgray"
                 roughness={0.4}
@@ -400,8 +402,7 @@ const EnemyTank = ({ enemy }: EnemyTankProps) => {
               args={[0.2, 0.4, bomberBaseRadius * 0.8]}
               position={[bomberBaseRadius * 0.8, bomberBaseHeight / 2 + 0.2, 0]}
               rotation={[0, 0, Math.PI / 6]}
-              castShadow
-              onClick={() => handleHit(25)}>
+              castShadow>
               <meshStandardMaterial
                 color="#4A4A4A"
                 roughness={0.5}
@@ -416,8 +417,7 @@ const EnemyTank = ({ enemy }: EnemyTankProps) => {
                 0,
               ]}
               rotation={[0, 0, -Math.PI / 6]}
-              castShadow
-              onClick={() => handleHit(25)}>
+              castShadow>
               <meshStandardMaterial
                 color="#4A4A4A"
                 roughness={0.5}
@@ -444,8 +444,7 @@ const EnemyTank = ({ enemy }: EnemyTankProps) => {
             <Box
               args={isTank ? [1.5, 0.5, 2] : [1.8, 0.7, 1.8]}
               castShadow
-              receiveShadow
-              onClick={() => handleHit(25)}>
+              receiveShadow>
               <meshStandardMaterial color={isTank ? "red" : "darkblue"} />
             </Box>
             <group position={[0, isTank ? 0.25 : 0.35, 0]} ref={turretRef}>
@@ -453,8 +452,7 @@ const EnemyTank = ({ enemy }: EnemyTankProps) => {
               <Cylinder
                 args={isTank ? [0.5, 0.5, 0.15, 16] : [0.6, 0.6, 0.2, 16]}
                 position={[0, isTank ? 0.075 : 0.1, 0]}
-                castShadow
-                onClick={() => handleHit(25)}>
+                castShadow>
                 <meshStandardMaterial
                   color={isTank ? "darkred" : "royalblue"}
                 />
@@ -462,8 +460,7 @@ const EnemyTank = ({ enemy }: EnemyTankProps) => {
               <Cylinder
                 args={isTank ? [0.6, 0.7, 0.4, 16] : [0.7, 0.8, 0.5, 16]}
                 position={[0, 0.2, 0]}
-                castShadow
-                onClick={() => handleHit(25)}>
+                castShadow>
                 <meshStandardMaterial
                   color={isTank ? "darkred" : "royalblue"}
                 />
@@ -471,8 +468,7 @@ const EnemyTank = ({ enemy }: EnemyTankProps) => {
               <Cylinder
                 args={[0.3, 0.3, 0.1, 16]}
                 position={[0, 0.45, -0.2]}
-                castShadow
-                onClick={() => handleHit(25)}>
+                castShadow>
                 <meshStandardMaterial
                   color={isTank ? "darkred" : "royalblue"}
                 />
@@ -481,31 +477,27 @@ const EnemyTank = ({ enemy }: EnemyTankProps) => {
                 args={isTank ? [0.1, 0.1, 1.5, 16] : [0.12, 0.12, 2, 16]}
                 position={[0, 0.2, isTank ? 1 : 1.2]}
                 rotation={[Math.PI / 2, 0, 0]}
-                castShadow
-                onClick={() => handleHit(25)}>
+                castShadow>
                 <meshStandardMaterial color={isTank ? "darkgray" : "navy"} />
               </Cylinder>
               <Cylinder
                 args={isTank ? [0.15, 0.15, 0.2, 16] : [0.18, 0.18, 0.25, 16]}
                 position={[0, 0.2, isTank ? 1.85 : 2.35]}
                 rotation={[Math.PI / 2, 0, 0]}
-                castShadow
-                onClick={() => handleHit(25)}>
+                castShadow>
                 <meshStandardMaterial color={isTank ? "black" : "darkgray"} />
               </Cylinder>
               <Cylinder
                 args={[0.02, 0.02, 1, 8]}
                 position={[0.3, 0.65, -0.3]}
                 rotation={[0, 0, 0]}
-                castShadow
-                onClick={() => handleHit(25)}>
+                castShadow>
                 <meshStandardMaterial color="gray" />
               </Cylinder>
               <Box
                 args={[0.2, 0.3, 0.8]}
                 position={[isTank ? 0.55 : 0.65, 0.2, 0]}
-                castShadow
-                onClick={() => handleHit(25)}>
+                castShadow>
                 <meshStandardMaterial
                   color={isTank ? "darkred" : "royalblue"}
                 />
@@ -513,8 +505,7 @@ const EnemyTank = ({ enemy }: EnemyTankProps) => {
               <Box
                 args={[0.2, 0.3, 0.8]}
                 position={[isTank ? -0.55 : -0.65, 0.2, 0]}
-                castShadow
-                onClick={() => handleHit(25)}>
+                castShadow>
                 <meshStandardMaterial
                   color={isTank ? "darkred" : "royalblue"}
                 />
@@ -522,8 +513,7 @@ const EnemyTank = ({ enemy }: EnemyTankProps) => {
               <Box
                 args={[0.2, 0.1, 0.1]}
                 position={[0, isTank ? 0.4 : 0.41, isTank ? 0.4 : 0.5]} // Increased y-position for blue turret to fix z-flickering
-                castShadow
-                onClick={() => handleHit(25)}>
+                castShadow>
                 <meshStandardMaterial color="black" />
               </Box>
             </group>
@@ -533,16 +523,14 @@ const EnemyTank = ({ enemy }: EnemyTankProps) => {
                   args={[0.3, 0.2, 2.2]}
                   position={[-0.7, -0.3, 0]}
                   castShadow
-                  receiveShadow
-                  onClick={() => handleHit(25)}>
+                  receiveShadow>
                   <meshStandardMaterial color="black" />
                 </Box>
                 <Box
                   args={[0.3, 0.2, 2.2]}
                   position={[0.7, -0.3, 0]}
                   castShadow
-                  receiveShadow
-                  onClick={() => handleHit(25)}>
+                  receiveShadow>
                   <meshStandardMaterial color="black" />
                 </Box>
               </>
@@ -551,76 +539,14 @@ const EnemyTank = ({ enemy }: EnemyTankProps) => {
                 args={[1.8, 0.3, 1.8]}
                 position={[0, -0.15, 0]}
                 castShadow
-                receiveShadow
-                onClick={() => handleHit(25)}>
+                receiveShadow>
                 <meshStandardMaterial color="navy" />
               </Box>
             )}
           </>
         )}
 
-        {/* Health Bar */}
-        <Box
-          args={[1, 0.1, 0.1]}
-          position={[
-            0,
-            isBomber
-              ? bomberBaseHeight + bomberCockpitSize * 0.5 + 0.2
-              : isTank
-              ? 1.2
-              : 1.5,
-            0,
-          ]}
-          renderOrder={1}>
-          <meshBasicMaterial color="red" transparent depthTest={false} />
-        </Box>
-        <Box
-          args={[healthPercent, 0.1, 0.1]}
-          position={[
-            -(1 - healthPercent) / 2,
-            isBomber
-              ? bomberBaseHeight + bomberCockpitSize * 0.5 + 0.2
-              : isTank
-              ? 1.2
-              : 1.5,
-            0.001,
-          ]}
-          renderOrder={2}>
-          <meshBasicMaterial color="lime" transparent depthTest={false} />
-        </Box>
       </group>
-
-      {/* Enemy Projectiles */}
-      {projectiles.map((projectile) => {
-        const playerLevel = getState().playerLevel;
-        let damage = 5; // Default damage for early game
-        if (playerLevel > 15) {
-          damage = 10;
-        }
-        if (playerLevel > 25) {
-          damage = 15;
-        }
-        if (playerLevel > 40) {
-          damage = 20;
-        }
-        if (playerLevel > 50) {
-          damage = 25;
-        }
-        if (playerLevel > 60) {
-          damage = 30; // End game damage
-        }
-        return (
-          <Projectile
-            key={projectile.id}
-            id={projectile.id}
-            position={projectile.position}
-            rotation={projectile.rotation}
-            damage={damage}
-            onRemove={removeProjectile}
-            isEnemy={true}
-          />
-        );
-      })}
     </>
   );
 };

@@ -1,4 +1,4 @@
-# Tank Rogue
+# Rogue Tank Royale
 
 ![Start Screen](/public/assets/images/startScreen.png)
 
@@ -12,80 +12,99 @@
 
 ![End Game](/public/assets/images/endGame.png)
 
-A roguelike tank game built with React and Three.js where you control a tank in a procedurally generated world, fight enemy tanks and customize with secondary weapons.
+A roguelike tank game built with React and Three.js. Fight waves of enemy tanks in a procedurally lit arena, earn upgrades, and mount secondary weapons as the containment zone closes in.
 
 ## Features
 
-- 3D tank combat with shooting mechanics
-- Procedurally generated levels with increasing difficulty
-- Different types of enemies (tanks and turrets)
-- Power-up system (health, speed, damage)
-- Game state management with score, health, and levels
-- Third-person camera that follows the player
-- Advanced state management with Zustand
-- Optimized rendering with React Three Fiber
+- 3D tank combat with auto-firing primary cannon
+- Secondary weapons: Mortar, Laser, Shotgun, Sniper, Tesla Coil
+- Procedural difficulty scaling and safe-zone shrinkage
+- Enemy types: tanks, stationary turrets, kamikaze bombers
+- Power-ups: health packs and coins (spend coins from the pause menu)
+- Stat upgrades and multi-weapon loadouts
+- Third-person follow camera + first-person view
+- Mobile dual-joystick controls
+- Zustand state slices, spatial hashing, pooled/instanced primary projectiles
 
 ## Controls
 
-- **W/A/S/D** - Move the tank forward, left, backward, right
-- **J/K** - Rotate the turret left/right
-- **ESC** - Pause game
+### Desktop
+
+| Input | Action |
+|-------|--------|
+| **W / A / S / D** | Move |
+| **J / K** | Rotate turret |
+| **V** | Toggle first-person view |
+| **ESC** | Pause / field supply shop |
+| **1–3** | Pick upgrade (when upgrade UI is open) |
+| **1–4** | Pick secondary weapon (when weapon select is open) |
+
+Primary turret fire is automatic. Secondary weapons track and fire on their own cooldowns.
+
+### Mobile
+
+- Left joystick: move
+- Right joystick: aim turret
+- Pause button: open pause / field supply
 
 ## Power-ups
 
-- **Red (Health)** - Restore health
+- **Health (red)** — restore hull integrity
+- **Coins (gold)** — spend in pause menu:
+  - **Field Repair** — heal (costs coins)
+  - **Reinforced Plating** — +max health (costs coins)
 
 ## Enemies
 
-- **Red Tanks** - Standard enemies that chase the player
-- **Blue Turrets** - Stationary enemies that rotate to aim at the player
-- **Yellow Bombers** - Fast explosive enemies that explode on contact
+- **Red tanks** — chase and shoot
+- **Blue turrets** — stationary, track and fire
+- **Yellow bombers** — rush and explode on contact
 
 ## Architecture
 
-The game uses a centralized state management approach with Zustand:
+Zustand store composed of slices:
 
-1. **Game State**: Core state management for player stats, enemies, power-ups, and game status
-2. **Components**: React components for UI and game elements
-3. **Models**: 3D models and behavior for tanks, enemies, and projectiles
-4. **Hooks**: Custom React hooks for keyboard controls and other functionality
+1. **Player / Enemy / Game flow / Safe zone / Weapons / Input / Terrain**
+2. **Components** — React UI + R3F scene
+3. **Models** — tanks, enemies, secondary weapons
+4. **Systems** — projectile pool, spatial hash, level generation
 
 ## Development
 
 ### Prerequisites
 
-- Node.js (v14.x or higher)
-- npm or yarn
+- Node.js 18+
+- npm
 
 ### Installation
 
-1. Clone the repository
+```bash
+git clone https://github.com/yourusername/rogue-tank-royale.git
+cd rogue-tank-royale
+npm install
+npm run dev
+```
 
-   ```
-   git clone https://github.com/yourusername/tank-rogue.git
-   cd tank-rogue
-   ```
+Open `http://localhost:5173`.
 
-2. Install dependencies
+### Scripts
 
-   ```
-   npm install
-   ```
+| Command | Purpose |
+|---------|---------|
+| `npm run dev` | Vite dev server |
+| `npm run build` | Typecheck + production build |
+| `npm run test:run` | Vitest once |
+| `npm run typecheck` | `tsc --noEmit` |
+| `npm run lint` | ESLint |
 
-3. Run the development server
+### Dev shortcuts (desktop)
 
-   ```
-   npm run dev
-   ```
-
-4. Open your browser and navigate to `http://localhost:5173`
+- **Shift+L** — advance level (dev)
+- **Shift+F / P / H** — FPS / performance dumps (dev)
 
 ## Technology Stack
 
-- **React** - UI framework
-- **Three.js** - 3D rendering
-- **React Three Fiber** - React renderer for Three.js
-- **React Three Drei** - Useful helpers for React Three Fiber
-- **Zustand** - State management
-- **TypeScript** - Type safety
-- **Vite** - Fast development server and build tool
+- **React** + **TypeScript**
+- **Three.js** via **React Three Fiber** / **Drei**
+- **Zustand**
+- **Vite** + **Vitest**

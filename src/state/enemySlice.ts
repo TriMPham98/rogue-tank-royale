@@ -3,30 +3,7 @@ import type { StateCreator } from "zustand";
 import type { GameState, EnemySlice, Enemy, PowerUp } from "./types";
 import { GAME_CONSTANTS } from "../constants/game";
 import SoundManager from "../utils/sound";
-
-// Helper function to keep entities within map boundaries
-const enforceMapBoundaries = (
-  position: [number, number, number]
-): [number, number, number] => {
-  const halfMapSize = GAME_CONSTANTS.HALF_MAP_SIZE;
-  const buffer = GAME_CONSTANTS.MAP_BOUNDARY_BUFFER;
-
-  const constrainedPosition: [number, number, number] = [...position];
-
-  if (constrainedPosition[0] < -halfMapSize + buffer) {
-    constrainedPosition[0] = -halfMapSize + buffer;
-  } else if (constrainedPosition[0] > halfMapSize - buffer) {
-    constrainedPosition[0] = halfMapSize - buffer;
-  }
-
-  if (constrainedPosition[2] < -halfMapSize + buffer) {
-    constrainedPosition[2] = -halfMapSize + buffer;
-  } else if (constrainedPosition[2] > halfMapSize - buffer) {
-    constrainedPosition[2] = halfMapSize - buffer;
-  }
-
-  return constrainedPosition;
-};
+import { enforceMapBoundaries } from "../utils/boundaries";
 
 export const createEnemySlice: StateCreator<
   GameState,
