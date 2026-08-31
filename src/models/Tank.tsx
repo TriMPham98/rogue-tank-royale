@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect, useMemo } from "react";
 import { useFrame } from "@react-three/fiber";
-import { Box, Cylinder, Sphere } from "@react-three/drei";
 import { Group, Vector3, Quaternion, Euler } from "three";
+import PlayerTankMesh from "./tankVisuals/PlayerTankMesh";
 import { useKeyboardControls } from "../hooks/useKeyboardControls";
 import { useGameState, SecondaryWeapon } from "../utils/gameState";
 import { debug } from "../utils/debug";
@@ -46,6 +46,8 @@ const Tank = ({ position = [0, 0, 0], isFirstPerson = false }: TankProps) => {
 
   const tankRotationRef = useRef(Math.PI);
   const turretRotationRef = useRef(0);
+  const trackSpinRef = useRef(0);
+  const muzzleFlashRef = useRef(0);
   const positionRef = useRef<[number, number, number]>([...position]);
   const isInitializedRef = useRef(false);
   const _quat = useRef(new Quaternion()).current;
@@ -203,6 +205,7 @@ const Tank = ({ position = [0, 0, 0], isFirstPerson = false }: TankProps) => {
       tankRef.current.position.x = potentialX;
       tankRef.current.position.z = potentialZ;
       moved = true;
+      trackSpinRef.current += intendedMovementMagnitude * moveSpeed * delta * 2.4;
     } else {
       moved = false;
     }
@@ -279,6 +282,7 @@ const Tank = ({ position = [0, 0, 0], isFirstPerson = false }: TankProps) => {
         tankRotationRef.current + turretRotationRef.current,
         playerTurretDamage
       );
+      muzzleFlashRef.current = 1;
       recordShot(currentTime);
 
       sound.setVolume("playerCannon", 0.22);
@@ -376,295 +380,13 @@ const Tank = ({ position = [0, 0, 0], isFirstPerson = false }: TankProps) => {
         ref={tankRef}
         position={position}
         rotation={[0, tankRotationRef.current, 0]}>
-        <Box
-          args={[1.8, 0.6, 2.2]}
-          position={[0, 0, 0]}
-          castShadow
-          receiveShadow>
-          <meshStandardMaterial
-            color="#2E8B57"
-            metalness={0.3}
-            roughness={0.7}
-          />
-        </Box>
-        <Box
-          args={[1.2, 0.4, 0.5]}
-          position={[0, 0.2, -1.35]}
-          rotation={[Math.PI / 6, 0, 0]}
-          castShadow
-          receiveShadow>
-          <meshStandardMaterial
-            color="#2E8B57"
-            metalness={0.3}
-            roughness={0.7}
-          />
-        </Box>
-        <Box
-          args={[0.5, 0.1, 0.3]}
-          position={[-0.5, 0.35, -0.8]}
-          castShadow
-          receiveShadow>
-          <meshStandardMaterial
-            color="#257548"
-            metalness={0.3}
-            roughness={0.7}
-          />
-        </Box>
-        <Box
-          args={[0.5, 0.1, 0.3]}
-          position={[0.5, 0.35, -0.8]}
-          castShadow
-          receiveShadow>
-          <meshStandardMaterial
-            color="#257548"
-            metalness={0.3}
-            roughness={0.7}
-          />
-        </Box>
-        <Box
-          args={[0.8, 0.1, 0.25]}
-          position={[0, 0.35, 0.9]}
-          castShadow
-          receiveShadow>
-          <meshStandardMaterial
-            color="#257548"
-            metalness={0.3}
-            roughness={0.7}
-          />
-        </Box>
-        <Box args={[0.15, 0.1, 0.05]} position={[-0.6, 0.1, 1.15]} castShadow>
-          <meshStandardMaterial
-            color="white"
-            emissive="yellow"
-            emissiveIntensity={1}
-          />
-        </Box>
-        <Box args={[0.15, 0.1, 0.05]} position={[0.6, 0.1, 1.15]} castShadow>
-          <meshStandardMaterial
-            color="white"
-            emissive="yellow"
-            emissiveIntensity={1}
-          />
-        </Box>
-        <Box args={[0.15, 0.1, 0.05]} position={[-0.75, 0.1, -1.15]} castShadow>
-          <meshStandardMaterial
-            color="red"
-            emissive="red"
-            emissiveIntensity={isBraking ? 2.5 : 0.8}
-          />
-        </Box>
-        <Box args={[0.15, 0.1, 0.05]} position={[0.75, 0.1, -1.15]} castShadow>
-          <meshStandardMaterial
-            color="red"
-            emissive="red"
-            emissiveIntensity={isBraking ? 2.5 : 0.8}
-          />
-        </Box>
-        <Box
-          args={[0.4, 0.25, 2.4]}
-          position={[-0.8, -0.3, 0]}
-          castShadow
-          receiveShadow>
-          <meshStandardMaterial color="#333333" roughness={0.9} />
-        </Box>
-        <Box
-          args={[0.4, 0.25, 2.4]}
-          position={[0.8, -0.3, 0]}
-          castShadow
-          receiveShadow>
-          <meshStandardMaterial color="#333333" roughness={0.9} />
-        </Box>
-        <Box
-          args={[0.2, 0.1, 2.2]}
-          position={[-0.8, 0.05, 0]}
-          castShadow
-          receiveShadow>
-          <meshStandardMaterial
-            color="#2E8B57"
-            metalness={0.3}
-            roughness={0.7}
-          />
-        </Box>
-        <Box
-          args={[0.2, 0.1, 2.2]}
-          position={[0.8, 0.05, 0]}
-          castShadow
-          receiveShadow>
-          <meshStandardMaterial
-            color="#2E8B57"
-            metalness={0.3}
-            roughness={0.7}
-          />
-        </Box>
-        {[...Array(6)].map((_, i) => (
-          <Cylinder
-            key={`roller-l-${i}`}
-            args={[0.12, 0.12, 0.1, 8]}
-            position={[-0.8, -0.3, -0.8 + i * 0.36]}
-            rotation={[0, 0, Math.PI / 2]}
-            castShadow
-            receiveShadow>
-            <meshStandardMaterial
-              color="#444444"
-              roughness={0.8}
-              metalness={0.2}
-            />
-          </Cylinder>
-        ))}
-        {[...Array(6)].map((_, i) => (
-          <Cylinder
-            key={`roller-r-${i}`}
-            args={[0.12, 0.12, 0.1, 8]}
-            position={[0.8, -0.3, -0.8 + i * 0.36]}
-            rotation={[0, 0, Math.PI / 2]}
-            castShadow
-            receiveShadow>
-            <meshStandardMaterial
-              color="#444444"
-              roughness={0.8}
-              metalness={0.2}
-            />
-          </Cylinder>
-        ))}
-        <group position={[0, 0.5, 0]} ref={turretRef}>
-          {!isFirstPerson && (
-            <>
-              <Cylinder
-                args={[0.6, 0.6, 0.2, 20]}
-                position={[0, 0.1, 0]}
-                castShadow>
-                <meshStandardMaterial
-                  color="darkolivegreen"
-                  metalness={0.4}
-                  roughness={0.6}
-                />
-              </Cylinder>
-              <Cylinder
-                args={[0.7, 0.8, 0.5, 20]}
-                position={[0, 0.25, 0]}
-                castShadow>
-                <meshStandardMaterial
-                  color="darkolivegreen"
-                  metalness={0.4}
-                  roughness={0.6}
-                />
-              </Cylinder>
-              <Cylinder
-                args={[0.35, 0.35, 0.15, 16]}
-                position={[0, 0.55, -0.3]}
-                castShadow>
-                <meshStandardMaterial
-                  color="#4a5e2a"
-                  metalness={0.4}
-                  roughness={0.6}
-                />
-              </Cylinder>
-            </>
-          )}
-          <Cylinder
-            args={[0.12, 0.12, 1.8, 16]}
-            position={[0, 0.25, 1.1]}
-            rotation={[Math.PI / 2, 0, 0]}
-            castShadow>
-            <meshStandardMaterial
-              color="gray"
-              metalness={0.5}
-              roughness={0.5}
-            />
-          </Cylinder>
-          <Cylinder
-            args={[0.18, 0.18, 0.3, 16]}
-            position={[0, 0.25, 2]}
-            rotation={[Math.PI / 2, 0, 0]}
-            castShadow>
-            <meshStandardMaterial
-              color="black"
-              metalness={0.6}
-              roughness={0.4}
-            />
-          </Cylinder>
-          <Box args={[0.25, 0.35, 1]} position={[-0.65, 0.25, 0]} castShadow>
-            <meshStandardMaterial
-              color="darkolivegreen"
-              metalness={0.4}
-              roughness={0.6}
-            />
-          </Box>
-          <Box args={[0.25, 0.35, 1]} position={[0.65, 0.25, 0]} castShadow>
-            <meshStandardMaterial
-              color="darkolivegreen"
-              metalness={0.4}
-              roughness={0.6}
-            />
-          </Box>
-          <Cylinder
-            args={[0.05, 0.05, 0.2, 8]}
-            position={[0.4, 0.55, -0.4]}
-            castShadow>
-            <meshStandardMaterial
-              color="#333"
-              metalness={0.8}
-              roughness={0.2}
-            />
-          </Cylinder>
-          <Cylinder
-            args={[0.02, 0.02, 1.0, 8]}
-            position={[0.4, 1.0, -0.4]}
-            castShadow>
-            <meshStandardMaterial
-              color="silver"
-              metalness={0.8}
-              roughness={0.2}
-            />
-          </Cylinder>
-          {!isFirstPerson && (
-            <>
-              <Box
-                args={[0.25, 0.15, 0.15]}
-                position={[0, 0.4, 0.5]}
-                castShadow>
-                <meshStandardMaterial
-                  color="black"
-                  emissive="blue"
-                  emissiveIntensity={0.3}
-                />
-              </Box>
-              <Sphere args={[0.15, 16, 16]} position={[0, 0.6, 0.2]} castShadow>
-                <meshStandardMaterial
-                  color="cyan"
-                  emissive="cyan"
-                  emissiveIntensity={0.6 + Math.sin(Date.now() * 0.005) * 0.4}
-                  transparent
-                  opacity={0.85}
-                />
-              </Sphere>
-            </>
-          )}
-          {isFirstPerson && (
-            <group position={[0, 0.25, 3.5]}>
-              {/* Horizontal bar */}
-              <Box args={[0.3, 0.02, 0.02]}>
-                <meshStandardMaterial
-                  color="#00ff00"
-                  emissive="#00ff00"
-                  emissiveIntensity={1.5}
-                  transparent
-                  opacity={0.9}
-                />
-              </Box>
-              {/* Vertical bar */}
-              <Box args={[0.02, 0.3, 0.02]}>
-                <meshStandardMaterial
-                  color="#00ff00"
-                  emissive="#00ff00"
-                  emissiveIntensity={1.5}
-                  transparent
-                  opacity={0.9}
-                />
-              </Box>
-            </group>
-          )}
-        </group>
+        <PlayerTankMesh
+          turretRef={turretRef}
+          isFirstPerson={isFirstPerson}
+          isBraking={isBraking}
+          trackSpinRef={trackSpinRef}
+          muzzleFlashRef={muzzleFlashRef}
+        />
       </group>
 
       {renderedSideWeapons}

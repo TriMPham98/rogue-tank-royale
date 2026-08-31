@@ -95,6 +95,11 @@ const TankWireframe: React.FC<TankWireframeProps> = ({
     sight: new Vector3(0, 20, 0.5),
     dome: new Vector3(0, 30, 0.2),
     turretConnector: new Vector3(0, 28, 0),
+    glacis: new Vector3(0, 22, 10),
+    leftSkirt: new Vector3(-30, -0.04, 0),
+    rightSkirt: new Vector3(30, -0.04, 0),
+    cupola: new Vector3(0.12, 32, -0.18),
+    muzzleBrake: new Vector3(0, 0.25, 18),
   };
 
   // Define the target positions (final positions)
@@ -123,6 +128,11 @@ const TankWireframe: React.FC<TankWireframeProps> = ({
     sight: new Vector3(0, 0.4, 0.5),
     dome: new Vector3(0, 0.6, 0.2),
     turretConnector: new Vector3(0, 0.4, 0),
+    glacis: new Vector3(0, 0.1, 0.98),
+    leftSkirt: new Vector3(-0.94, -0.04, 0),
+    rightSkirt: new Vector3(0.94, -0.04, 0),
+    cupola: new Vector3(0.12, 0.58, -0.18),
+    muzzleBrake: new Vector3(0, 0.25, 2.16),
   };
 
   // Animation timing for each part (when they start moving, between 0 and 1)
@@ -152,6 +162,11 @@ const TankWireframe: React.FC<TankWireframeProps> = ({
     antennaTop: 0.72,
     sight: 0.75,
     dome: 0.78,
+    glacis: 0.07,
+    leftSkirt: 0.26,
+    rightSkirt: 0.26,
+    cupola: 0.8,
+    muzzleBrake: 0.62,
   };
 
   // Roller positions with calculated interpolations
@@ -324,6 +339,37 @@ const TankWireframe: React.FC<TankWireframeProps> = ({
         args={[1.2, 0.4, 0.5]}
         position={getPosition("frontPart", currentProgress).toArray()}
         rotation={[Math.PI / 6, 0, 0]}>
+        <meshBasicMaterial
+          color="#00FF00"
+          wireframe={true}
+          opacity={0.8}
+          transparent={true}
+        />
+      </Box>
+      <Box
+        args={[1.72, 0.2, 0.58]}
+        position={getPosition("glacis", currentProgress).toArray()}
+        rotation={[-0.42, 0, 0]}>
+        <meshBasicMaterial
+          color="#00FF00"
+          wireframe={true}
+          opacity={0.8}
+          transparent={true}
+        />
+      </Box>
+      <Box
+        args={[0.1, 0.3, 2.28]}
+        position={getPosition("leftSkirt", currentProgress).toArray()}>
+        <meshBasicMaterial
+          color="#00FF00"
+          wireframe={true}
+          opacity={0.8}
+          transparent={true}
+        />
+      </Box>
+      <Box
+        args={[0.1, 0.3, 2.28]}
+        position={getPosition("rightSkirt", currentProgress).toArray()}>
         <meshBasicMaterial
           color="#00FF00"
           wireframe={true}
@@ -525,6 +571,27 @@ const TankWireframe: React.FC<TankWireframeProps> = ({
           args={[0.18, 0.18, 0.3, 8]}
           position={getPosition("cannonTip", currentProgress).toArray()}
           rotation={[Math.PI / 2, 0, 0]}>
+          <meshBasicMaterial
+            color="#00FF00"
+            wireframe={true}
+            opacity={0.8}
+            transparent={true}
+          />
+        </Cylinder>
+        <Cylinder
+          args={[0.14, 0.2, 0.12, 8]}
+          position={getPosition("muzzleBrake", currentProgress).toArray()}
+          rotation={[Math.PI / 2, 0, 0]}>
+          <meshBasicMaterial
+            color="#00FF00"
+            wireframe={true}
+            opacity={0.8}
+            transparent={true}
+          />
+        </Cylinder>
+        <Cylinder
+          args={[0.22, 0.22, 0.14, 8]}
+          position={getPosition("cupola", currentProgress).toArray()}>
           <meshBasicMaterial
             color="#00FF00"
             wireframe={true}

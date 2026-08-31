@@ -1,7 +1,8 @@
 import { useRef, useMemo, useEffect } from "react";
 import { useFrame } from "@react-three/fiber";
-import { Box, Cylinder, Sphere } from "@react-three/drei";
 import { Vector3, Group, Quaternion, MeshStandardMaterial } from "three";
+import EnemyCombatMesh from "./tankVisuals/EnemyCombatMesh";
+import BomberMesh from "./tankVisuals/BomberMesh";
 import { Enemy, useGameState } from "../utils/gameState";
 import { debug } from "../utils/debug";
 import { GAME_CONSTANTS } from "../constants/game";
@@ -24,6 +25,7 @@ const EnemyTank = ({ enemy }: EnemyTankProps) => {
 
   const tankRotationRef = useRef(0);
   const turretRotationRef = useRef(0);
+  const trackSpinRef = useRef(0);
 
   const isBomber = enemy.type === "bomber";
   const tankRadius = isBomber ? GAME_CONSTANTS.BOMBER_RADIUS : GAME_CONSTANTS.TANK_RADIUS;
@@ -262,6 +264,7 @@ const EnemyTank = ({ enemy }: EnemyTankProps) => {
         if (!checkTerrainCollision(potentialX, potentialZ)) {
           tankRef.current.position.x = potentialX;
           tankRef.current.position.z = potentialZ;
+          trackSpinRef.current += moveSpeed * delta * 2.4;
 
           if (isBomber) {
             tankRef.current.position.y =
@@ -332,13 +335,6 @@ const EnemyTank = ({ enemy }: EnemyTankProps) => {
     }
   });
 
-  const bomberBaseRadius = 1.2;
-  const bomberBaseBottomRadius = 1.4;
-  const bomberBaseHeight = 0.3;
-  const bomberCockpitSize = 0.8;
-  const bomberThrusterRadius = 0.3;
-  const bomberThrusterHeight = 0.6;
-
   return (
     <>
       <group
@@ -346,204 +342,13 @@ const EnemyTank = ({ enemy }: EnemyTankProps) => {
         position={initialPosition}
         name={`enemy-${enemy.id}-${enemy.type}`}>
         {isBomber ? (
-          <>
-            <Cylinder
-              args={[
-                bomberBaseRadius,
-                bomberBaseBottomRadius,
-                bomberBaseHeight,
-                8,
-              ]}
-              position={[0, bomberBaseHeight / 2, 0]}
-              castShadow
-              receiveShadow>
-              <meshStandardMaterial
-                color="#4A4A4A"
-                roughness={0.5}
-                metalness={0.7}
-              />
-            </Cylinder>
-            <Box
-              args={[
-                bomberCockpitSize,
-                bomberCockpitSize * 0.5,
-                bomberCockpitSize,
-              ]}
-              position={[0, bomberBaseHeight + bomberCockpitSize * 0.25, 0]}
-              rotation={[0, Math.PI / 4, 0]}
-              castShadow>
-              <meshStandardMaterial
-                color="#FFD700"
-                roughness={0.3}
-                metalness={0.5}
-              />
-            </Box>
-            <Cylinder
-              args={[
-                bomberThrusterRadius,
-                bomberThrusterRadius,
-                bomberThrusterHeight,
-                6,
-              ]}
-              position={[
-                0,
-                bomberBaseHeight / 2 + 0.1,
-                -bomberBaseRadius * 0.8,
-              ]}
-              rotation={[Math.PI / 2, 0, 0]}
-              castShadow>
-              <meshStandardMaterial
-                color="darkgray"
-                roughness={0.4}
-                metalness={0.6}
-              />
-            </Cylinder>
-            <Box
-              args={[0.2, 0.4, bomberBaseRadius * 0.8]}
-              position={[bomberBaseRadius * 0.8, bomberBaseHeight / 2 + 0.2, 0]}
-              rotation={[0, 0, Math.PI / 6]}
-              castShadow>
-              <meshStandardMaterial
-                color="#4A4A4A"
-                roughness={0.5}
-                metalness={0.7}
-              />
-            </Box>
-            <Box
-              args={[0.2, 0.4, bomberBaseRadius * 0.8]}
-              position={[
-                -bomberBaseRadius * 0.8,
-                bomberBaseHeight / 2 + 0.2,
-                0,
-              ]}
-              rotation={[0, 0, -Math.PI / 6]}
-              castShadow>
-              <meshStandardMaterial
-                color="#4A4A4A"
-                roughness={0.5}
-                metalness={0.7}
-              />
-            </Box>
-            <Sphere
-              args={[bomberBaseRadius * 1.1, 24, 24]}
-              position={[0, bomberBaseHeight / 2, 0]}
-              renderOrder={1}>
-              <meshStandardMaterial
-                ref={flashMaterialRef}
-                color="red"
-                emissive="red"
-                emissiveIntensity={0}
-                transparent={true}
-                opacity={0}
-                depthWrite={false}
-              />
-            </Sphere>
-          </>
+          <BomberMesh flashMaterialRef={flashMaterialRef} />
         ) : (
-          <>
-            <Box
-              args={isTank ? [1.5, 0.5, 2] : [1.8, 0.7, 1.8]}
-              castShadow
-              receiveShadow>
-              <meshStandardMaterial color={isTank ? "red" : "darkblue"} />
-            </Box>
-            <group position={[0, isTank ? 0.25 : 0.35, 0]} ref={turretRef}>
-              {/* Turret Connecting Cylinder */}
-              <Cylinder
-                args={isTank ? [0.5, 0.5, 0.15, 16] : [0.6, 0.6, 0.2, 16]}
-                position={[0, isTank ? 0.075 : 0.1, 0]}
-                castShadow>
-                <meshStandardMaterial
-                  color={isTank ? "darkred" : "royalblue"}
-                />
-              </Cylinder>
-              <Cylinder
-                args={isTank ? [0.6, 0.7, 0.4, 16] : [0.7, 0.8, 0.5, 16]}
-                position={[0, 0.2, 0]}
-                castShadow>
-                <meshStandardMaterial
-                  color={isTank ? "darkred" : "royalblue"}
-                />
-              </Cylinder>
-              <Cylinder
-                args={[0.3, 0.3, 0.1, 16]}
-                position={[0, 0.45, -0.2]}
-                castShadow>
-                <meshStandardMaterial
-                  color={isTank ? "darkred" : "royalblue"}
-                />
-              </Cylinder>
-              <Cylinder
-                args={isTank ? [0.1, 0.1, 1.5, 16] : [0.12, 0.12, 2, 16]}
-                position={[0, 0.2, isTank ? 1 : 1.2]}
-                rotation={[Math.PI / 2, 0, 0]}
-                castShadow>
-                <meshStandardMaterial color={isTank ? "darkgray" : "navy"} />
-              </Cylinder>
-              <Cylinder
-                args={isTank ? [0.15, 0.15, 0.2, 16] : [0.18, 0.18, 0.25, 16]}
-                position={[0, 0.2, isTank ? 1.85 : 2.35]}
-                rotation={[Math.PI / 2, 0, 0]}
-                castShadow>
-                <meshStandardMaterial color={isTank ? "black" : "darkgray"} />
-              </Cylinder>
-              <Cylinder
-                args={[0.02, 0.02, 1, 8]}
-                position={[0.3, 0.65, -0.3]}
-                rotation={[0, 0, 0]}
-                castShadow>
-                <meshStandardMaterial color="gray" />
-              </Cylinder>
-              <Box
-                args={[0.2, 0.3, 0.8]}
-                position={[isTank ? 0.55 : 0.65, 0.2, 0]}
-                castShadow>
-                <meshStandardMaterial
-                  color={isTank ? "darkred" : "royalblue"}
-                />
-              </Box>
-              <Box
-                args={[0.2, 0.3, 0.8]}
-                position={[isTank ? -0.55 : -0.65, 0.2, 0]}
-                castShadow>
-                <meshStandardMaterial
-                  color={isTank ? "darkred" : "royalblue"}
-                />
-              </Box>
-              <Box
-                args={[0.2, 0.1, 0.1]}
-                position={[0, isTank ? 0.4 : 0.41, isTank ? 0.4 : 0.5]} // Increased y-position for blue turret to fix z-flickering
-                castShadow>
-                <meshStandardMaterial color="black" />
-              </Box>
-            </group>
-            {isTank ? (
-              <>
-                <Box
-                  args={[0.3, 0.2, 2.2]}
-                  position={[-0.7, -0.3, 0]}
-                  castShadow
-                  receiveShadow>
-                  <meshStandardMaterial color="black" />
-                </Box>
-                <Box
-                  args={[0.3, 0.2, 2.2]}
-                  position={[0.7, -0.3, 0]}
-                  castShadow
-                  receiveShadow>
-                  <meshStandardMaterial color="black" />
-                </Box>
-              </>
-            ) : (
-              <Box
-                args={[1.8, 0.3, 1.8]}
-                position={[0, -0.15, 0]}
-                castShadow
-                receiveShadow>
-                <meshStandardMaterial color="navy" />
-              </Box>
-            )}
-          </>
+          <EnemyCombatMesh
+            variant={isTank ? "tank" : "turret"}
+            turretRef={turretRef}
+            trackSpinRef={trackSpinRef}
+          />
         )}
 
       </group>
