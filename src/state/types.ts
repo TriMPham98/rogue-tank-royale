@@ -100,6 +100,8 @@ export interface GameFlowSlice {
   purchaseFieldRepair: () => boolean;
   /** Spend coins for reinforced plating (+max HP). Returns false if unaffordable. */
   purchaseReinforcedPlating: () => boolean;
+  /** Bank this run's unspent supply + bonuses into permanent progression (once per run). */
+  bankRunSupply: () => void;
 }
 
 // Safe zone state slice
@@ -148,8 +150,34 @@ export interface TerrainSlice {
   setTerrainObstacles: (obstacles: ObstacleData[]) => void;
 }
 
+export type RedZonePhase = "idle" | "warning" | "bombing";
+
+// Encounter state slice (red zone + bosses)
+export interface EncounterSlice {
+  redZonePhase: RedZonePhase;
+  redZoneCenter: [number, number];
+  redZoneRadius: number;
+  redZoneSecondsLeft: number;
+  bossActive: boolean;
+  bossIncoming: boolean;
+  bossSpawnedForLevel: number;
+  bossesDefeated: number;
+  /** True once this run's supply has been banked into permanent progression */
+  runBanked: boolean;
+
+  setRedZone: (
+    update: Partial<
+      Pick<
+        EncounterSlice,
+        "redZonePhase" | "redZoneCenter" | "redZoneRadius" | "redZoneSecondsLeft"
+      >
+    >
+  ) => void;
+}
+
 // Combined game state type
 export type GameState = PlayerSlice &
+  EncounterSlice &
   EnemySlice &
   GameFlowSlice &
   SafeZoneSlice &

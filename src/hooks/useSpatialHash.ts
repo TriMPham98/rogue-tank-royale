@@ -11,6 +11,8 @@ import {
   resetSpatialHashes,
 } from "../utils/spatialHash";
 import { GAME_CONSTANTS } from "../constants/game";
+import { enemyBodyRadius } from "../utils/enemyHitbox";
+import type { EnemyType } from "../types/index";
 
 interface ObstacleSpatialEntity extends SpatialEntity {
   size: number;
@@ -18,7 +20,7 @@ interface ObstacleSpatialEntity extends SpatialEntity {
 }
 
 interface EnemySpatialEntity extends SpatialEntity {
-  type: "tank" | "turret" | "bomber";
+  type: EnemyType;
 }
 
 /**
@@ -101,12 +103,7 @@ export function useEnemySpatialHash() {
 
         // Only update if position changed significantly (> 0.5 units)
         if (!prevPos || Math.abs(prevPos[0] - currentX) > 0.5 || Math.abs(prevPos[1] - currentZ) > 0.5) {
-          const radius =
-            enemy.type === "bomber"
-              ? GAME_CONSTANTS.BOMBER_RADIUS
-              : enemy.type === "turret"
-              ? GAME_CONSTANTS.TURRET_COLLISION_RADIUS
-              : GAME_CONSTANTS.TANK_RADIUS;
+          const radius = enemyBodyRadius(enemy.type);
 
           const entity: EnemySpatialEntity = {
             id: enemy.id,

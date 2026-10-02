@@ -102,6 +102,8 @@ const InstancedHealthBars = ({ maxEnemies = 25 }: InstancedHealthBarsProps) => {
     for (const enemy of enemies) {
       if (index >= maxEnemies) break;
       currentIds.add(enemy.id);
+      // Bosses get a dedicated HUD bar instead
+      if (enemy.type === "boss") continue;
 
       if (!cache.has(enemy.id)) {
         cache.set(enemy.id, enemy.health);

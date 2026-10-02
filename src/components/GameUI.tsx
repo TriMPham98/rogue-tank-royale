@@ -20,6 +20,7 @@ import PauseMenu from "./ui/PauseMenu";
 import GameOverScreen from "./ui/GameOverScreen";
 import SettingsModal from "./ui/SettingsModal";
 import ConfirmDialog from "./ui/ConfirmDialog";
+import EncounterHUD from "./ui/EncounterHUD";
 
 // Define BASE_TARGETS constant for enemy count calculation
 const BASE_TARGETS = 1;
@@ -121,6 +122,9 @@ const GameUI = () => {
     returnToMainMenu,
     showOrientationWarning,
     setOrientationWarning,
+    redZonePhase,
+    redZoneCenter,
+    redZoneRadius,
   } = useGameState();
 
   // Reset elapsed time when game is restarted (level and score reset to initial values)
@@ -488,6 +492,11 @@ const GameUI = () => {
           rank={rank}
           isPreContainmentShiftRank={isPreContainmentShiftRank}
           elapsedTime={elapsedTime}
+          redZone={{
+            phase: redZonePhase,
+            center: redZoneCenter,
+            radius: redZoneRadius,
+          }}
         />
       )}
       <HUD
@@ -521,6 +530,7 @@ const GameUI = () => {
         />
       )}
 
+      {!isGameOver && !isPaused && <EncounterHUD />}
       <OutsideZoneWarning
         show={isOutsideCombatZone && !isGameOver && !isPaused}
         opacity={warningOpacityRef.current}

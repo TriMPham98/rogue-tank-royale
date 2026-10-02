@@ -1801,3 +1801,210 @@
   padding: 8px 12px;
   font-size: 0.8rem;
 }
+
+/* --- Supply / persistent progression --- */
+.military-theme .supply-unit {
+  font-size: 0.7em;
+  opacity: 0.8;
+  letter-spacing: 0.06em;
+}
+
+.military-theme .supply-bank-hint {
+  font-size: 0.72rem;
+  color: #8fbf8f;
+  margin: 0 0 0.5rem;
+  max-width: 360px;
+  text-align: center;
+}
+
+.military-theme .game-over-content {
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  padding-bottom: 20px;
+}
+
+.military-theme .run-report {
+  align-self: stretch;
+  margin: 4px 30px 14px;
+  padding: 8px 12px;
+  border: 1px dashed rgba(255, 213, 74, 0.4);
+  font-family: "Courier New", monospace;
+  font-size: 0.95rem;
+  color: #d8c58a;
+}
+
+.military-theme .run-report-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 0;
+}
+
+.military-theme .run-report-row.total {
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 213, 74, 0.3);
+  color: #ffd54a;
+  font-weight: bold;
+}
+
+/* --- Boss bar --- */
+.military-theme .boss-bar {
+  position: absolute;
+  top: 84px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(520px, calc(100vw - 32px));
+  pointer-events: none;
+  font-family: "Courier New", monospace;
+  z-index: 95;
+}
+
+.military-theme .boss-bar-label {
+  display: flex;
+  justify-content: space-between;
+  color: #ffb3a8;
+  font-weight: bold;
+  letter-spacing: 0.2em;
+  font-size: 0.85rem;
+  text-shadow: 0 0 8px rgba(255, 40, 20, 0.6);
+  margin-bottom: 4px;
+}
+
+.military-theme .boss-bar-tag {
+  color: #ff5a40;
+}
+
+.military-theme .boss-bar-track {
+  height: 12px;
+  background: rgba(30, 8, 6, 0.85);
+  border: 1px solid rgba(255, 90, 64, 0.7);
+  box-shadow: 0 0 12px rgba(255, 40, 20, 0.35);
+}
+
+.military-theme .boss-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #a5150b, #ff3b22);
+  transition: width 0.18s ease-out;
+}
+
+.military-theme .boss-bar.enraged .boss-bar-fill {
+  animation: boss-enraged 0.6s ease-in-out infinite alternate;
+}
+
+@keyframes boss-enraged {
+  from {
+    filter: brightness(1);
+  }
+  to {
+    filter: brightness(1.6);
+  }
+}
+
+.military-theme .boss-banner {
+  position: absolute;
+  top: 26%;
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+  pointer-events: none;
+  font-family: "Courier New", monospace;
+  color: #ffd0c8;
+  z-index: 96;
+  padding: 14px 28px;
+  background: rgba(40, 6, 4, 0.75);
+  border-top: 2px solid #ff3b22;
+  border-bottom: 2px solid #ff3b22;
+  animation: boss-banner-in 0.35s ease-out;
+}
+
+.military-theme .boss-banner-kicker {
+  color: #ff3b22;
+  letter-spacing: 0.5em;
+  font-size: 0.8rem;
+  animation: red-blink 0.5s steps(2, jump-none) infinite;
+}
+
+.military-theme .boss-banner-title {
+  font-size: 1.6rem;
+  font-weight: bold;
+  letter-spacing: 0.12em;
+  margin: 4px 0;
+  text-shadow: 0 0 12px rgba(255, 40, 20, 0.8);
+}
+
+.military-theme .boss-banner-sub {
+  font-size: 0.85rem;
+  letter-spacing: 0.1em;
+}
+
+@keyframes boss-banner-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) scaleY(0.2);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) scaleY(1);
+  }
+}
+
+/* --- Red zone alert --- */
+.military-theme .red-zone-alert {
+  position: absolute;
+  top: 120px;
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+  pointer-events: none;
+  font-family: "Courier New", monospace;
+  padding: 8px 22px;
+  background: rgba(60, 6, 4, 0.7);
+  border: 1px solid rgba(255, 59, 34, 0.8);
+  border-radius: 3px;
+  color: #ffd0c8;
+  z-index: 94;
+}
+
+.military-theme .red-zone-alert-title {
+  font-weight: bold;
+  letter-spacing: 0.25em;
+  color: #ff5a40;
+}
+
+.military-theme .red-zone-alert-sub {
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  margin-top: 2px;
+}
+
+.military-theme .red-zone-alert.warning .red-zone-alert-title,
+.military-theme .red-zone-alert.inside {
+  animation: red-blink 0.5s steps(2, jump-none) infinite;
+}
+
+.military-theme .red-zone-alert.inside {
+  background: rgba(140, 10, 6, 0.85);
+  box-shadow: 0 0 18px rgba(255, 40, 20, 0.6);
+}
+
+@keyframes red-blink {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.45;
+  }
+}
+
+.game-ui.military-theme.mobile .boss-bar {
+  top: 56px;
+}
+
+.game-ui.military-theme.mobile .red-zone-alert {
+  top: 92px;
+  font-size: 80%;
+}
+
+.game-ui.military-theme.mobile .boss-banner-title {
+  font-size: 1.1rem;
+}

@@ -5,6 +5,7 @@ import { debug } from "../utils/debug";
 import * as THREE from "three"; // Import THREE for Vector2
 import { GAME_CONSTANTS } from "../constants/game";
 import { enforceMapBoundaries } from "./boundaries";
+import { getRunBonuses } from "../state/progression";
 
 const SPAWN_STATS_DEBUG = false;
 
@@ -101,6 +102,35 @@ const generateVariedSpawnPosition = (
       maxDistance
     )
   );
+};
+
+/** Supply in a single drop: whole tens-scale numbers, rounded to 5, boosted by Salvage Crew. */
+const rollSupplyValue = (type: Enemy["type"], level: number): number => {
+  const base = type === "tank" ? 30 : type === "turret" ? 40 : 20;
+  const levelFactor = Math.max(1, Math.floor(level / 5));
+  const raw = base + Math.random() * (2 + levelFactor) * 10;
+  const value = raw * getRunBonuses().supplyMultiplier;
+  return Math.min(990, Math.max(5, Math.round(value / 5) * 5));
+};
+
+/** Boss wreck: a ring of supply crates plus a guaranteed medkit. */
+const dropBossCache = (at: [number, number, number], level: number) => {
+  const { spawnPowerUp } = useGameState.getState();
+  const crates = 6;
+  for (let i = 0; i < crates; i++) {
+    const a = (i / crates) * Math.PI * 2 + Math.random() * 0.4;
+    const r = 2 + Math.random() * 1.5;
+    spawnPowerUp({
+      position: enforceMapBoundaries([
+        at[0] + Math.cos(a) * r,
+        0.5,
+        at[2] + Math.sin(a) * r,
+      ]),
+      type: "coin",
+      value: rollSupplyValue("turret", level) * 2,
+    });
+  }
+  spawnPowerUp({ position: [at[0], 0.5, at[2]], type: "health" });
 };
 
 const BASE_ENEMIES = 1;
@@ -491,6 +521,10 @@ export const useRespawnManager = () => {
             );
 
             prevEnemies.forEach((enemy) => {
+              if (enemy.type === "boss") {
+                dropBossCache(enemy.position, state.level);
+                return;
+              }
               // 5% chance to drop a health power-up
               if (Math.random() < 0.05) {
                 const { spawnPowerUp } = state;
@@ -510,16 +544,10 @@ export const useRespawnManager = () => {
                   debug.log(`Enemy ${enemy.id} dropped a health power-up`);
                 }
               }
-              // 35% chance to drop coins; value scales mildly with level and enemy type
+              // 35% chance to drop supply; value scales mildly with level and enemy type
               if (Math.random() < 0.35) {
                 const { spawnPowerUp } = state;
-                const base =
-                  enemy.type === "tank" ? 3 : enemy.type === "turret" ? 4 : 2;
-                const levelFactor = Math.max(1, Math.floor(state.level / 5));
-                const coinValue = Math.min(
-                  99,
-                  base + Math.floor(Math.random() * (2 + levelFactor))
-                );
+                const coinValue = rollSupplyValue(enemy.type, state.level);
                 const offsetX = (Math.random() - 0.5) * 1.5;
                 const offsetZ = (Math.random() - 0.5) * 1.5;
                 const dropPosition: [number, number, number] = [

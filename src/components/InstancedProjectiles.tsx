@@ -9,6 +9,7 @@ import { useGameState } from "../utils/gameState";
 import { getProjectilePool, resetProjectilePool, PooledProjectile } from "../systems/ProjectilePool";
 import { getObstacleHash } from "../utils/spatialHash";
 import { GAME_CONSTANTS } from "../constants/game";
+import { enemyHitRadius } from "../utils/enemyHitbox";
 import { fx, FX_COLORS } from "../models/fx/fxSystem";
 import {
   getCoreGeometry,
@@ -152,7 +153,7 @@ const InstancedProjectiles = ({
         const edx = enemy.position[0] - newX;
         const edz = enemy.position[2] - newZ;
         const distSq = edx * edx + edz * edz;
-        const collisionRadius = enemy.type === "tank" ? 2.5 : 1.5;
+        const collisionRadius = enemyHitRadius(enemy.type, 2.5, 1.5);
 
         if (distSq < collisionRadius * collisionRadius) {
           projectile.hitEnemies.add(enemy.id);

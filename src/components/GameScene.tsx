@@ -10,6 +10,9 @@ import GrassField from "../models/environment/GrassField";
 import FxLayer from "../models/fx/FxLayer";
 import ShaderWarmup from "../models/fx/ShaderWarmup";
 import SafeZone from "../models/SafeZone";
+import RedZone from "../models/RedZone";
+import BossTank from "../models/BossTank";
+import BossDirector from "./BossDirector";
 import {
   Suspense,
   useRef,
@@ -751,9 +754,15 @@ const SceneContent = memo((): JSX.Element => {
       <IntroSpotlight />
       <SafeZone />
       <Tank position={[0, 0.5, 0]} isFirstPerson={isFirstPersonView} />
-      {enemies.map((enemy) => (
-        <EnemyTank key={`enemy-${enemy.id}`} enemy={enemy} />
-      ))}
+      {enemies.map((enemy) =>
+        enemy.type === "boss" ? (
+          <BossTank key={`enemy-${enemy.id}`} enemy={enemy} />
+        ) : (
+          <EnemyTank key={`enemy-${enemy.id}`} enemy={enemy} />
+        )
+      )}
+      <BossDirector />
+      <RedZone />
       {/* Primary cannon projectiles + enemy health bars (instanced draw calls) */}
       <InstancedProjectiles />
       <InstancedHealthBars maxEnemies={GAME_CONSTANTS.MAX_ENEMIES + 5} />

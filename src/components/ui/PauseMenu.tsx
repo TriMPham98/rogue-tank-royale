@@ -1,6 +1,7 @@
 // Pause Menu component — includes minimal coin shop (field supply sink)
 import React from "react";
 import { GAME_CONSTANTS } from "../../constants/game";
+import { formatSupply } from "../../state/progression";
 
 interface PauseMenuProps {
   coins: number;
@@ -36,7 +37,8 @@ const PauseMenu: React.FC<PauseMenuProps> = ({
 
         <div className="field-supply">
           <div className="field-supply-header">
-            FIELD SUPPLY <span className="coin-balance">{coins} coins</span>
+            FIELD SUPPLY{" "}
+            <span className="coin-balance">{formatSupply(coins)} SP</span>
           </div>
           <button
             className="ui-button supply-button"
@@ -47,20 +49,24 @@ const PauseMenu: React.FC<PauseMenuProps> = ({
                 ? "Hull already at full integrity"
                 : `Restore ${GAME_CONSTANTS.HEALTH_PACK_HEAL_AMOUNT} HP`
             }
-            aria-label={`Field repair for ${repairCost} coins`}>
+            aria-label={`Field repair for ${repairCost} supply`}>
             FIELD REPAIR (+{GAME_CONSTANTS.HEALTH_PACK_HEAL_AMOUNT} HP) —{" "}
-            {repairCost}¢
+            {formatSupply(repairCost)} SP
           </button>
           <button
             className="ui-button supply-button"
             onClick={onPurchasePlating}
             disabled={!canPlating}
             title={`+${GAME_CONSTANTS.COIN_PLATING_MAX_HEALTH} max hull`}
-            aria-label={`Reinforced plating for ${platingCost} coins`}>
+            aria-label={`Reinforced plating for ${platingCost} supply`}>
             REINFORCED PLATING (+{GAME_CONSTANTS.COIN_PLATING_MAX_HEALTH} MAX) —{" "}
-            {platingCost}¢
+            {formatSupply(platingCost)} SP
           </button>
         </div>
+
+        <p className="supply-bank-hint">
+          Unspent supply is banked for permanent Armory upgrades when the run ends.
+        </p>
 
         <button className="ui-button main-menu-button" onClick={onMainMenu}>
           MAIN MENU

@@ -26,11 +26,11 @@ export const GAME_CONSTANTS = {
 
   // Combat
   COIN_DROP_CHANCE: 0.05,
-  DEFAULT_COIN_VALUE: 1,
-  /** Pause-menu field repair cost (coins) */
-  COIN_REPAIR_COST: 5,
-  /** Pause-menu max-health kit cost (coins) */
-  COIN_PLATING_COST: 12,
+  DEFAULT_COIN_VALUE: 10,
+  /** Pause-menu field repair cost (supply) */
+  COIN_REPAIR_COST: 50,
+  /** Pause-menu max-health kit cost (supply) */
+  COIN_PLATING_COST: 120,
   /** Max health granted by plating purchase */
   COIN_PLATING_MAX_HEALTH: 15,
   HEALTH_PACK_HEAL_AMOUNT: 25,
@@ -45,6 +45,26 @@ export const GAME_CONSTANTS = {
   SAFE_ZONE_BASE_DAMAGE: 1,
   SAFE_ZONE_DEFAULT_SHRINK_RATE: 0.05,
   SAFE_ZONE_MAX_SHRINK_RATE: 0.15,
+
+  // Red zone (bombardment)
+  RED_ZONE_ACTIVATION_LEVEL: 3,
+  RED_ZONE_MIN_RADIUS: 9,
+  RED_ZONE_MAX_RADIUS: 13,
+  RED_ZONE_WARNING_DURATION: 6,
+  RED_ZONE_BOMBING_DURATION: 8,
+  RED_ZONE_BASE_COOLDOWN: 50,
+  RED_ZONE_MIN_COOLDOWN: 22,
+  RED_ZONE_BOMB_FALL_TIME: 1.1,
+  RED_ZONE_BOMB_RADIUS: 3.2,
+  RED_ZONE_BOMB_BASE_DAMAGE: 14,
+
+  // Boss fights
+  BOSS_LEVEL_INTERVAL: 10,
+  BOSS_RADIUS: 2.6,
+  BOSS_HEALTH_MULTIPLIER: 12,
+  BOSS_SPEED: 1.1,
+  BOSS_SCORE: 2500,
+  BOSS_INTRO_DELAY: 3.5,
 
   // Player defaults
   PLAYER_INITIAL_HEALTH: 100,

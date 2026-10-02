@@ -1,7 +1,7 @@
 // Consolidated type definitions - Single source of truth
 
 // Enemy types
-export type EnemyType = "tank" | "turret" | "bomber";
+export type EnemyType = "tank" | "turret" | "bomber" | "boss";
 
 export interface Enemy {
   id: string;
@@ -9,6 +9,8 @@ export interface Enemy {
   health: number;
   type: EnemyType;
   speed?: number;
+  /** Set for enemies whose HUD needs a health fraction (bosses) */
+  maxHealth?: number;
 }
 
 // Power-up types

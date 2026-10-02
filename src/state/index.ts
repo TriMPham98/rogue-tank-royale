@@ -9,6 +9,7 @@ import { createSafeZoneSlice } from "./safeZoneSlice";
 import { createWeaponSlice } from "./weaponSlice";
 import { createInputSlice } from "./inputSlice";
 import { createTerrainSlice } from "./terrainSlice";
+import { createEncounterSlice } from "./encounterSlice";
 
 // Re-export types for convenience
 export type {
@@ -20,6 +21,8 @@ export type {
   WeaponSlice,
   InputSlice,
   TerrainSlice,
+  EncounterSlice,
+  RedZonePhase,
   Enemy,
   PowerUp,
   SecondaryWeapon,
@@ -36,7 +39,15 @@ export const useGameState = create<GameState>()((...a) => ({
   ...createWeaponSlice(...a),
   ...createInputSlice(...a),
   ...createTerrainSlice(...a),
+  ...createEncounterSlice(...a),
 }));
+
+// Bank supply into permanent progression the moment a run ends
+useGameState.subscribe((state, prev) => {
+  if (state.isGameOver && !prev.isGameOver) {
+    state.bankRunSupply();
+  }
+});
 
 // Default export for backward compatibility
 export default useGameState;

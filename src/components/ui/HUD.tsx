@@ -1,5 +1,6 @@
 // Top HUD component - Health, Score, Rank
 import React from "react";
+import { formatSupply } from "../../state/progression";
 
 interface HUDProps {
   playerHealth: number;
@@ -62,7 +63,9 @@ const HUD: React.FC<HUDProps> = ({
       </div>
       <div className="hud-element coin-balance-hud">
         <div className="hud-label">SUPPLY</div>
-        <div className="score-value">{coins}¢</div>
+        <div className="score-value">
+          {formatSupply(coins)} <span className="supply-unit">SP</span>
+        </div>
       </div>
       <div className="hud-element rank-progression">
         <div className="hud-label">

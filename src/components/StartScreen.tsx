@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import "./StartScreen.css";
 import { useGameState } from "../utils/gameState";
 import { generateLevel } from "../utils/levelGenerator";
@@ -7,6 +7,9 @@ import TankWireframeDisplay from "./TankWireframeDisplay";
 import { AnimState } from "./TankWireframe";
 import { debug } from "../utils/debug";
 import { useSettings } from "../utils/settingsContext";
+import ArmoryPanel from "./ui/ArmoryPanel";
+import "./ui/ArmoryPanel.css";
+import { formatSupply, useProgression } from "../state/progression";
 
 type TransitionStep = "idle" | "fading" | "assembling";
 
@@ -27,6 +30,10 @@ const StartScreen: React.FC = () => {
     AnimState.IDLE
   );
   const [showSettings, setShowSettings] = useState(false);
+  const [showArmory, setShowArmory] = useState(false);
+  const overlayOpenRef = useRef(false);
+  overlayOpenRef.current = showArmory || showSettings;
+  const bank = useProgression((s) => s.bank);
 
   // Settings context
   const {
@@ -79,8 +86,13 @@ const StartScreen: React.FC = () => {
 
     // Add keyboard event listener for SPACEBAR and ENTER
     const handleKeyPress = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && overlayOpenRef.current) {
+        setShowArmory(false);
+        setShowSettings(false);
+        return;
+      }
       if (event.key === " " || event.key === "Enter") {
-        if (transitionStep === "idle") {
+        if (transitionStep === "idle" && !overlayOpenRef.current) {
           handleStartGame();
         }
       }
@@ -179,6 +191,12 @@ const StartScreen: React.FC = () => {
         <button className="start-button" onClick={handleStartGame}>
           DEPLOY UNIT
         </button>
+        <button
+          className="settings-button-start armory-button-start"
+          onClick={() => setShowArmory(true)}>
+          ARMORY{" "}
+          <span className="armory-button-bank">{formatSupply(bank)} SP</span>
+        </button>
         <button className="settings-button-start" onClick={handleOpenSettings}>
           SETTINGS
         </button>
@@ -186,6 +204,23 @@ const StartScreen: React.FC = () => {
       {/* Conditionally render Loading text during fade/assembly */}
       {transitionStep === "fading" && (
         <div className="loading-text">Loading...</div>
+      )}
+
+      {showArmory && (
+        <div className="overlay armory-overlay" onClick={() => setShowArmory(false)}>
+          <div className="armory-overlay-inner" onClick={(e) => e.stopPropagation()}>
+            <ArmoryPanel />
+            <p className="armory-overlay-hint">
+              Unspent supply and rank bonuses are banked at the end of every run.
+              Upgrades apply automatically on deploy.
+            </p>
+            <button
+              className="settings-button-start"
+              onClick={() => setShowArmory(false)}>
+              CLOSE
+            </button>
+          </div>
+        </div>
       )}
 
       {/* Settings overlay */}

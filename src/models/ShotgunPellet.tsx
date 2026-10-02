@@ -4,6 +4,7 @@ import { useFrame, RootState } from "@react-three/fiber";
 import { Group, Vector3 } from "three";
 import { useGameState } from "../utils/gameState";
 import { debug } from "../utils/debug";
+import { enemyHitRadius } from "../utils/enemyHitbox";
 import { fx, FX_COLORS } from "./fx/fxSystem";
 import { getCoreGeometry, getCoreMaterial, getTrailGeometry, getTrailMaterial } from "./fx/tracers";
 
@@ -120,7 +121,7 @@ const ShotgunPellet = ({
         enemy.position[1],
         enemy.position[2]
       );
-      const enemyRadius: number = enemy.type === "tank" ? 1.5 : 1.0;
+      const enemyRadius: number = enemyHitRadius(enemy.type, 1.5, 1.0);
       const distanceToEnemy: number = currentPosition.distanceTo(enemyPos);
 
       if (distanceToEnemy < enemyRadius + 0.08) {

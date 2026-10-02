@@ -16,6 +16,11 @@ interface TacticalDisplayProps {
   rank: number;
   isPreContainmentShiftRank: boolean;
   elapsedTime: number;
+  redZone?: {
+    phase: "idle" | "warning" | "bombing";
+    center: [number, number];
+    radius: number;
+  };
 }
 
 const TacticalDisplay: React.FC<TacticalDisplayProps> = ({
@@ -29,6 +34,7 @@ const TacticalDisplay: React.FC<TacticalDisplayProps> = ({
   rank,
   isPreContainmentShiftRank,
   elapsedTime,
+  redZone,
 }) => {
   // Format time as MM:SS
   const formatTime = (seconds: number) => {
@@ -112,6 +118,18 @@ const TacticalDisplay: React.FC<TacticalDisplayProps> = ({
             </>
           )}
 
+          {redZone && redZone.phase !== "idle" && (
+            <div
+              className={`zone-circle red-zone ${redZone.phase}`}
+              style={{
+                left: `${(redZone.center[0] - redZone.radius) * scale + mapSize / 2}px`,
+                top: `${(redZone.center[1] - redZone.radius) * scale + mapSize / 2}px`,
+                width: `${redZone.radius * 2 * scale}px`,
+                height: `${redZone.radius * 2 * scale}px`,
+              }}
+            />
+          )}
+
           {hostiles.map((hostile) => {
             const hostileXRaw = hostile.position[0] * scale + mapSize / 2;
             const hostileYRaw = hostile.position[2] * scale + mapSize / 2;
@@ -123,6 +141,8 @@ const TacticalDisplay: React.FC<TacticalDisplayProps> = ({
               hostileClass = "hostile-marker turret";
             else if (hostile.type === "bomber")
               hostileClass = "hostile-marker bomber";
+            else if (hostile.type === "boss")
+              hostileClass = "hostile-marker boss";
 
             return (
               <div
@@ -163,6 +183,7 @@ const TacticalDisplay: React.FC<TacticalDisplayProps> = ({
     rank,
     isPreContainmentShiftRank,
     elapsedTime,
+    redZone,
   ]);
 
   return renderTacticalDisplay();

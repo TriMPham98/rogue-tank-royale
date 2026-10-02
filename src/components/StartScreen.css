@@ -441,3 +441,55 @@
   bottom: 10%; /* Adjusted from 15% to compensate for larger tank on mobile */
   font-size: 1.2rem;
 }
+
+/* Armory (persistent upgrades) */
+.armory-button-start {
+  color: #ffd54a;
+  border-color: #c9a93a;
+  text-shadow: 0 0 8px rgba(255, 213, 74, 0.35);
+  box-shadow: 0 0 8px rgba(255, 213, 74, 0.15);
+}
+
+.armory-button-start:hover {
+  color: #ffd54a;
+  border-color: #ffd54a;
+  background-color: rgba(255, 213, 74, 0.08);
+  box-shadow: 0 0 15px rgba(255, 213, 74, 0.3);
+}
+
+.armory-button-bank {
+  font-size: 0.75em;
+  opacity: 0.8;
+  margin-left: 6px;
+}
+
+.armory-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(8, 12, 8, 0.88);
+  backdrop-filter: blur(3px);
+  overflow-y: auto;
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+.armory-overlay-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  max-height: 100%;
+}
+
+.armory-overlay-hint {
+  font-family: "Courier New", monospace;
+  font-size: 0.8rem;
+  color: #8fbf8f;
+  text-align: center;
+  max-width: 520px;
+  margin: 6px 0 0;
+}

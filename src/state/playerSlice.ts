@@ -3,6 +3,7 @@ import type { StateCreator } from "zustand";
 import type { GameState, PlayerSlice, UpgradeableStat } from "./types";
 import { GAME_CONSTANTS } from "../constants/game";
 import { enforceMapBoundaries } from "../utils/boundaries";
+import { getRunBonuses } from "./progression";
 
 export const createPlayerSlice: StateCreator<
   GameState,
@@ -94,9 +95,9 @@ export const createPlayerSlice: StateCreator<
           const linearHealthScale = GAME_CONSTANTS.ENEMY_HEALTH_SCALE_PER_LEVEL;
           const currentTankHealth =
             tankBaseHealth + state.level * linearHealthScale;
-          const damageIncrease = Math.max(
-            15,
-            Math.floor(currentTankHealth * 0.25)
+          const damageIncrease = Math.floor(
+            Math.max(15, Math.floor(currentTankHealth * 0.25)) *
+              getRunBonuses().damageMultiplier
           );
           updates.playerTurretDamage =
             state.playerTurretDamage + damageIncrease;

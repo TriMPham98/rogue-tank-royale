@@ -1,0 +1,128 @@
+.armory-panel {
+  width: min(640px, calc(100vw - 32px));
+  box-sizing: border-box;
+  padding: 12px 14px 14px;
+  border: 1px solid rgba(80, 120, 80, 0.45);
+  border-radius: 4px;
+  background: rgba(10, 18, 10, 0.7);
+  font-family: "Courier New", monospace;
+  color: #a0d0a0;
+  text-align: left;
+}
+
+.armory-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 10px;
+  letter-spacing: 0.1em;
+}
+
+.armory-title {
+  color: #5fdc5f;
+  font-weight: bold;
+  font-size: 1rem;
+}
+
+.armory-bank {
+  color: #ffd54a;
+  font-weight: bold;
+  font-size: 1.05rem;
+}
+
+.armory-unit {
+  font-size: 0.7rem;
+  color: #c9a93a;
+  letter-spacing: 0.06em;
+}
+
+.armory-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 8px;
+}
+
+.armory-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  background: rgba(25, 32, 25, 0.9);
+  border: 1px solid rgba(110, 140, 110, 0.35);
+  border-radius: 3px;
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: border-color 0.15s ease, background 0.15s ease, opacity 0.15s ease;
+}
+
+.armory-item.affordable {
+  opacity: 1;
+  border-color: rgba(95, 220, 95, 0.6);
+}
+
+.armory-item.affordable:hover {
+  background: rgba(95, 220, 95, 0.12);
+  border-color: #5fdc5f;
+}
+
+.armory-item.maxed {
+  opacity: 0.85;
+  cursor: default;
+  border-color: rgba(255, 213, 74, 0.45);
+}
+
+.armory-item-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.8rem;
+  font-weight: bold;
+}
+
+.armory-item-name {
+  color: #c8d1c8;
+}
+
+.armory-item-cost {
+  color: #ffd54a;
+  white-space: nowrap;
+}
+
+.armory-item-effect {
+  font-size: 0.72rem;
+  color: #8fbf8f;
+}
+
+.armory-pips {
+  display: flex;
+  gap: 3px;
+}
+
+.armory-pips .pip {
+  flex: 1;
+  height: 4px;
+  max-width: 18px;
+  background: rgba(120, 140, 120, 0.3);
+}
+
+.armory-pips .pip.filled {
+  background: #5fdc5f;
+  box-shadow: 0 0 4px rgba(95, 220, 95, 0.6);
+}
+
+.armory-panel.compact .armory-grid {
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+}
+
+.armory-panel.compact .armory-item {
+  padding: 6px 8px;
+}
+
+@media (max-width: 480px) {
+  .armory-grid {
+    grid-template-columns: 1fr;
+  }
+}

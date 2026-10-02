@@ -215,3 +215,30 @@
     font-size: 0.8rem;
   }
 }
+
+.hostile-marker.boss {
+  width: 11px;
+  height: 11px;
+  background-color: #ff2a1a;
+  border: 2px solid #ffd0c8;
+  box-shadow: 0 0 6px #ff2a1a;
+  z-index: 103;
+}
+
+.zone-circle.red-zone {
+  border: 2px solid rgba(255, 50, 30, 0.95);
+  background-color: rgba(255, 40, 20, 0.28);
+}
+
+.zone-circle.red-zone.warning {
+  animation: red-zone-blink 0.5s steps(2, jump-none) infinite;
+}
+
+@keyframes red-zone-blink {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.35;
+  }
+}

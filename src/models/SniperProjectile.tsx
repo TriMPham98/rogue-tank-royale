@@ -3,6 +3,7 @@ import { useFrame } from "@react-three/fiber";
 import { Group, Vector3 } from "three";
 import { useGameState } from "../utils/gameState";
 import { debug } from "../utils/debug";
+import { enemyHitRadius } from "../utils/enemyHitbox";
 import { fx } from "./fx/fxSystem";
 import { getCoreGeometry, getCoreMaterial, getTrailGeometry, getTrailMaterial } from "./fx/tracers";
 
@@ -180,7 +181,7 @@ const SniperProjectile = ({
       const distanceToEnemy = enemyPos.distanceTo(projectilePos);
 
       // Sniper bullets have better targeting
-      const collisionRadius = enemy.type === "tank" ? 2.0 : 1.2;
+      const collisionRadius = enemyHitRadius(enemy.type, 2.0, 1.2);
 
       if (distanceToEnemy < collisionRadius) {
         hitEnemiesRef.current.add(enemy.id);

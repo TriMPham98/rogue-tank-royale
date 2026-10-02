@@ -4,6 +4,7 @@ import { useFrame } from "@react-three/fiber";
 import { Mesh, Vector3, Group } from "three";
 import { useGameState } from "../utils/gameState";
 import { debug } from "../utils/debug";
+import { enemyHitRadius } from "../utils/enemyHitbox";
 import { fx } from "./fx/fxSystem";
 import GlowSprite from "./fx/GlowSprite";
 import { ROCKET_MATS } from "./weaponVisuals/weaponMaterials";
@@ -272,7 +273,7 @@ const RocketProjectile = ({
     const enemies = getState().enemies;
     for (const enemy of enemies) {
       const enemyPos = new Vector3(...enemy.position);
-      const collisionRadius = (enemy.type === "tank" ? 1.8 : 1.0) + 0.15; // Add rocket radius
+      const collisionRadius = enemyHitRadius(enemy.type, 1.8, 1.0) + 0.15; // Add rocket radius
       // Quick check on distance squared
       if (
         enemyPos.distanceToSquared(currentPositionVec) <

@@ -7,7 +7,7 @@ import { enforceMapBoundaries } from "../utils/boundaries";
 import { getEnemyVisualPosition } from "../utils/enemyVisualPositions";
 import { fx } from "../models/fx/fxSystem";
 
-const EXPLOSION_SCALE = { tank: 1, turret: 1.15, bomber: 1.35 } as const;
+const EXPLOSION_SCALE = { tank: 1, turret: 1.15, bomber: 1.35, boss: 2.8 } as const;
 
 export const createEnemySlice: StateCreator<
   GameState,
@@ -63,6 +63,27 @@ export const createEnemySlice: StateCreator<
       const at = getEnemyVisualPosition(id) ?? enemy.position;
       fx.explosion(at[0], at[1], at[2], EXPLOSION_SCALE[enemy.type] ?? 1);
       get().removeEnemy(id);
+
+      if (enemy.type === "boss") {
+        // Secondary detonations sell the kill
+        setTimeout(() => fx.explosion(at[0] + 1.6, at[1], at[2] - 1.2, 1.4), 220);
+        setTimeout(() => fx.explosion(at[0] - 1.4, at[1], at[2] + 1.5, 1.2), 480);
+        SoundManager.setVolume("bossDefeated", 0.9);
+        SoundManager.play("bossDefeated");
+        get().increaseScore(GAME_CONSTANTS.BOSS_SCORE);
+        // Boss kill completes the level regardless of the regular kill count
+        set((s) => ({
+          bossActive: false,
+          bossesDefeated: s.bossesDefeated + 1,
+          enemiesDefeated: Math.max(
+            s.enemiesDefeated,
+            s.enemiesRequiredForNextLevel - 1
+          ),
+        }));
+        get().incrementEnemyDefeatCount();
+        return true;
+      }
+
       get().increaseScore(enemy.type === "tank" ? 100 : 150);
       get().incrementEnemyDefeatCount();
 
@@ -153,8 +174,8 @@ export const createEnemySlice: StateCreator<
             ...updates,
             coins: (state.coins || 0) + coinValue,
           };
-          SoundManager.setVolume("healthPickUp", 0.3);
-          SoundManager.play("healthPickUp");
+          SoundManager.setVolume("supplyPickUp", 0.55);
+          SoundManager.play("supplyPickUp");
         }
       }
 

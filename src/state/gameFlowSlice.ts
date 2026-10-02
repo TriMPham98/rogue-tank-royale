@@ -10,6 +10,9 @@ import { initialWeaponState } from "./weaponSlice";
 import { initialTerrainState } from "./terrainSlice";
 import { resetProjectilePool } from "../systems/ProjectilePool";
 import { clearAllEnemyVisualPositions } from "../utils/enemyVisualPositions";
+import { initialEncounterState } from "./encounterSlice";
+import { bombardment } from "../systems/bombardment";
+import { getRunStartStats, useProgression } from "./progression";
 
 export const createGameFlowSlice: StateCreator<
   GameState,
@@ -47,6 +50,7 @@ export const createGameFlowSlice: StateCreator<
     SoundManager.play("deployTank");
     resetProjectilePool();
     clearAllEnemyVisualPositions();
+    bombardment.reset();
 
     return set({
       ...initialPlayerState,
@@ -54,11 +58,13 @@ export const createGameFlowSlice: StateCreator<
       ...initialSafeZoneState,
       ...initialWeaponState,
       ...initialTerrainState,
+      ...initialEncounterState,
+      // Armory upgrades overwrite the base stats (and grant starting supply)
+      ...getRunStartStats(),
       isGameOver: false,
       isPaused: false,
       level: 1,
       score: 0,
-      coins: 0,
       enemiesDefeated: 0,
       enemiesRequiredForNextLevel: 1,
       showUpgradeUI: false,
@@ -82,14 +88,18 @@ export const createGameFlowSlice: StateCreator<
     })),
 
   returnToMainMenu: () => {
+    // Abandoning a run still banks what was earned
+    if (get().isGameStarted) get().bankRunSupply();
     resetProjectilePool();
     clearAllEnemyVisualPositions();
+    bombardment.reset();
     set({
       ...initialPlayerState,
       ...initialEnemyState,
       ...initialSafeZoneState,
       ...initialWeaponState,
       ...initialTerrainState,
+      ...initialEncounterState,
       isGameOver: false,
       isPaused: false,
       isGameStarted: false,
@@ -120,7 +130,12 @@ export const createGameFlowSlice: StateCreator<
         return state;
       }
 
-      const newCount = state.enemiesDefeated + 1;
+      let newCount = state.enemiesDefeated + 1;
+
+      // Boss levels only advance once the boss is destroyed
+      if (state.bossActive || state.bossIncoming) {
+        newCount = Math.min(newCount, state.enemiesRequiredForNextLevel - 1);
+      }
 
       if (newCount >= state.enemiesRequiredForNextLevel) {
         const remainingEnemies = newCount - state.enemiesRequiredForNextLevel;
@@ -290,6 +305,15 @@ export const createGameFlowSlice: StateCreator<
     SoundManager.setVolume("levelUp", 0.35);
     SoundManager.play("levelUp");
     return true;
+  },
+
+  bankRunSupply: () => {
+    const state = get();
+    if (state.runBanked) return;
+    set({ runBanked: true });
+    useProgression
+      .getState()
+      .bankRun(state.coins, state.level, state.bossesDefeated);
   },
 });
 
