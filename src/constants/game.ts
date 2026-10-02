@@ -11,7 +11,7 @@ export const GAME_CONSTANTS = {
   MIN_OBSTACLE_SPACING: 8,
 
   // Enemy limits
-  MAX_ENEMIES: 20,
+  MAX_ENEMIES: 24,
   MAX_TURRETS: 3,
 
   // Terrain generation
@@ -118,7 +118,6 @@ export const GAME_CONSTANTS = {
   EARLY_GAME_MAX_LEVEL: 24,
   MID_GAME_MAX_LEVEL: 50,
   UPGRADE_UI_MAX_LEVEL: 50,
-  WEAPON_SELECTION_LEVELS: [10, 20, 30, 40] as const,
 } as const;
 
 // Derived constants for convenience

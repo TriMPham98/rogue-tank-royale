@@ -6,6 +6,7 @@ import * as THREE from "three"; // Import THREE for Vector2
 import { GAME_CONSTANTS } from "../constants/game";
 import { enforceMapBoundaries } from "./boundaries";
 import { getRunBonuses } from "../state/progression";
+import { enemyHealth, enemySpeed, getMaxEnemies, respawnDelayMs } from "./difficulty";
 
 const SPAWN_STATS_DEBUG = false;
 
@@ -133,24 +134,6 @@ const dropBossCache = (at: [number, number, number], level: number) => {
   spawnPowerUp({ position: [at[0], 0.5, at[2]], type: "health" });
 };
 
-const BASE_ENEMIES = 1;
-const getMaxEnemies = (level: number) => {
-  if (level === 1) return 1;
-
-  // Reduce tanks in early game (levels 2-10)
-  if (level <= 10) {
-    return Math.min(BASE_ENEMIES + Math.floor(Math.sqrt(level) * 1.25), 15);
-  }
-  // Standard progression (levels 11-39)
-  else if (level < 40) {
-    return Math.min(BASE_ENEMIES + Math.floor(Math.sqrt(level) * 2), 15);
-  }
-  // Increase difficulty for late game (level 40+)
-  else {
-    return Math.min(BASE_ENEMIES + Math.floor(Math.sqrt(level) * 2.3), 20);
-  }
-};
-
 export const useRespawnManager = () => {
   const prevEnemyCountRef = useRef<number>(0);
   const prevEnemiesRef = useRef<string[]>([]);
@@ -198,23 +181,18 @@ export const useRespawnManager = () => {
 
         if (level >= 15 && random < bomberProbability) {
           type = "bomber";
-          health = 40 + level * 3;
-          speed = 4.0;
+          health = enemyHealth("bomber", level);
+          speed = enemySpeed("bomber", level);
         } else if (
           random < turretProbability + bomberProbability &&
           currentTurretCount < maxTurrets
         ) {
           type = "turret";
-          const turretBaseHealth = 75;
-          // Note: Reverted health scaling slightly to match generateEnemies for consistency
-          const linearScale = level * 9;
-          health = turretBaseHealth + linearScale;
+          health = enemyHealth("turret", level);
         } else {
           type = "tank";
-          const tankBaseHealth = 50;
-          const linearScale = level * 9;
-          health = tankBaseHealth + linearScale;
-          speed = 1.3;
+          health = enemyHealth("tank", level);
+          speed = enemySpeed("tank", level);
         }
 
         // Now generate position, checking safe zone for turrets
@@ -580,7 +558,7 @@ export const useRespawnManager = () => {
 
           // Respawn logic: Only spawn if under max and not currently in a wave spawn
           if (currentEnemyCount < maxEnemies && !isSpawningWaveRef.current) {
-            const respawnDelay = Math.max(4000 - state.level * 150, 1500); // Slightly longer base delay, scales down faster
+            const respawnDelay = respawnDelayMs(state.level);
             if (SPAWN_STATS_DEBUG)
               console.log(
                 `[SPAWN STATS] Scheduling respawn in ${respawnDelay}ms`

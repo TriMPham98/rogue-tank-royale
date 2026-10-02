@@ -29,10 +29,6 @@ const nextCooldown = (level: number) =>
     GAME_CONSTANTS.RED_ZONE_BASE_COOLDOWN - level * 0.8
   ) * rand(0.8, 1.2);
 
-/** Distance-attenuated volume for blasts/whistles. */
-const distanceVolume = (d: number, max: number, min = 0.02) =>
-  Math.max(min, max * (1 - d / 55));
-
 /**
  * PUBG-style red zone: a circle is marked on the map, a siren sounds, then
  * artillery rains down inside it for a few seconds. Also renders every shell
@@ -227,17 +223,15 @@ const RedZone = () => {
 
       if (!b.whistled && b.age >= b.fallTime - 1.0) {
         b.whistled = true;
-        if (d < 16) {
-          SoundManager.setVolume("bombWhistle", distanceVolume(d, 0.55));
-          SoundManager.play("bombWhistle", 90);
+        if (d < 18) {
+          SoundManager.playSpatial("bombWhistle", 0.6, d, 90);
         }
       }
 
       if (b.age < b.fallTime) continue;
 
       fx.blast(b.x, 0.3, b.z, b.radius * 1.15);
-      SoundManager.setVolume("bombBlast", distanceVolume(d, 0.85));
-      SoundManager.play("bombBlast", 35);
+      SoundManager.playSpatial("bombBlast", 0.95, d, 35);
 
       const hitRange = b.radius + GAME_CONSTANTS.TANK_RADIUS * 0.5;
       if (d < hitRange) {

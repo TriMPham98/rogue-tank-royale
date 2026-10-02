@@ -1,4 +1,5 @@
 import { Enemy, PowerUp, useGameState } from "./gameState";
+import { enemyHealth, enemySpeed, getMaxEnemies } from "./difficulty";
 import { debug } from "./debug";
 import * as THREE from "three"; // Import THREE for Vector2
 import { isWithinMapBoundaries } from "./boundaries";
@@ -196,26 +197,7 @@ export const generateEnemies = (
     return enemies;
   }
 
-  const baseEnemyCount = 1;
-  const maxEnemies = level >= 40 ? 20 : 15;
-
-  let enemyCount;
-  if (level <= 10) {
-    enemyCount = Math.min(
-      baseEnemyCount + Math.floor(Math.sqrt(level) * 1.25),
-      maxEnemies
-    );
-  } else if (level < 40) {
-    enemyCount = Math.min(
-      baseEnemyCount + Math.floor(Math.sqrt(level) * 2),
-      maxEnemies
-    );
-  } else {
-    enemyCount = Math.min(
-      baseEnemyCount + Math.floor(Math.sqrt(level) * 2.3),
-      maxEnemies
-    );
-  }
+  const enemyCount = getMaxEnemies(level);
 
   const gridSize = Math.min(40 + level * 2, 70);
 
@@ -245,23 +227,19 @@ export const generateEnemies = (
 
     if (level >= 15 && random < bomberProbability) {
       type = "bomber";
-      health = 40 + level * 3;
-      speed = 4.0;
+      health = enemyHealth("bomber", level);
+      speed = enemySpeed("bomber", level);
     } else if (
       random < turretProbability + bomberProbability &&
       turretCount < maxTurrets
     ) {
       type = "turret";
-      const turretBaseHealth = 75;
-      const linearScale = level * 9;
-      health = turretBaseHealth + linearScale;
+      health = enemyHealth("turret", level);
       turretCount++;
     } else {
       type = "tank";
-      const tankBaseHealth = 50;
-      const linearScale = level * 9;
-      health = tankBaseHealth + linearScale;
-      speed = 1.3;
+      health = enemyHealth("tank", level);
+      speed = enemySpeed("tank", level);
     }
 
     // Now find the final position, checking safe zone

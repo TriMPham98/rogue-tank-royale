@@ -21,21 +21,12 @@ import GameOverScreen from "./ui/GameOverScreen";
 import SettingsModal from "./ui/SettingsModal";
 import ConfirmDialog from "./ui/ConfirmDialog";
 import EncounterHUD from "./ui/EncounterHUD";
+import { GAME_CONSTANTS } from "../constants/game";
+import { getMaxEnemies } from "../utils/difficulty";
 
 // Define BASE_TARGETS constant for enemy count calculation
-const BASE_TARGETS = 1;
-
-// Calculate max hostiles for a given rank (matches the logic in respawnManager.ts)
-const getMaxTargets = (rank: number): number => {
-  if (rank === 1) return 1;
-  if (rank <= 10) {
-    return Math.min(BASE_TARGETS + Math.floor(Math.sqrt(rank) * 1.25), 15);
-  } else if (rank < 40) {
-    return Math.min(BASE_TARGETS + Math.floor(Math.sqrt(rank) * 2), 15);
-  } else {
-    return Math.min(BASE_TARGETS + Math.floor(Math.sqrt(rank) * 2.3), 20);
-  }
-};
+// Max hostiles for a given rank (shared with the respawn manager)
+const getMaxTargets = getMaxEnemies;
 
 const GameUI = () => {
   const [isOutsideCombatZone, setIsOutsideCombatZone] = useState(false);
@@ -145,16 +136,15 @@ const GameUI = () => {
     return () => clearInterval(timer);
   }, [isGameOver, isPaused]);
 
-  // Check for weapon selection opportunity when rank changes
-  useEffect(() => {
-    if (
-      [10, 20, 30, 40].includes(rank) &&
-      selectedWeapons.length < Math.min(Math.floor(rank / 10), 4) &&
-      !isGameOver
-    ) {
-      useGameState.setState({ showWeaponSelection: true });
+  // Weapon selection is opened by advanceLevel after a boss kill
+  const finishWeaponSelection = useCallback(() => {
+    closeWeaponSelection();
+    if (rank <= GAME_CONSTANTS.UPGRADE_UI_MAX_LEVEL) {
+      useGameState.setState({ showUpgradeUI: true });
+    } else if (useGameState.getState().isPaused) {
+      togglePause();
     }
-  }, [rank, isGameOver, selectedWeapons.length]);
+  }, [closeWeaponSelection, rank, togglePause]);
 
   // Monitor weapon selection state
   useEffect(() => {}, [showWeaponSelection, selectedWeapons]);
@@ -181,10 +171,7 @@ const GameUI = () => {
           keyIndex < availableWeapons.length
         ) {
           selectWeapon(availableWeapons[keyIndex]);
-          closeWeaponSelection();
-          if (rank <= 50) {
-            useGameState.setState({ showUpgradeUI: true });
-          }
+          finishWeaponSelection();
         }
       }
     };
@@ -201,6 +188,7 @@ const GameUI = () => {
     rank,
     selectWeapon,
     closeWeaponSelection,
+    finishWeaponSelection,
   ]);
 
   const handleEnhancementSelect = useCallback(
@@ -219,23 +207,14 @@ const GameUI = () => {
       <WeaponSelection
         onWeaponSelect={(weapon: SecondaryWeapon) => {
           selectWeapon(weapon);
-          closeWeaponSelection();
-          if (rank <= 50) {
-            useGameState.setState({ showUpgradeUI: true });
-          }
+          finishWeaponSelection();
         }}
-        onClose={() => {
-          closeWeaponSelection();
-          if (rank <= 50) {
-            useGameState.setState({ showUpgradeUI: true });
-          }
-        }}
+        onClose={finishWeaponSelection}
         state={{
           availableWeapons,
           selectedWeapons,
           level: rank,
-          canSelect:
-            selectedWeapons.length < Math.min(Math.floor(rank / 10), 4),
+          canSelect: selectedWeapons.length < GAME_CONSTANTS.MAX_SIDE_WEAPONS,
         }}
       />
     );

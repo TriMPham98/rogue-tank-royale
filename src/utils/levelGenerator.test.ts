@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { getMaxEnemies } from "./difficulty";
+import { GAME_CONSTANTS } from "../constants/game";
 
 // Mock the gameState module before importing levelGenerator
 vi.mock("./gameState", () => ({
@@ -144,7 +146,7 @@ describe("levelGenerator", () => {
 
     it("should cap enemy count at max limit", () => {
       const enemies = generateEnemies(100, [0, 0.5, 0]);
-      expect(enemies.length).toBeLessThanOrEqual(20);
+      expect(enemies.length).toBeLessThanOrEqual(GAME_CONSTANTS.MAX_ENEMIES);
     });
 
     it("should scale enemy health with level", () => {
@@ -230,30 +232,8 @@ describe("levelGenerator", () => {
   });
 
   describe("enemy count formulas", () => {
-    // Test the enemy count formula directly
-    function calculateEnemyCount(level: number): number {
-      const baseEnemyCount = 1;
-      const maxEnemies = level >= 40 ? 20 : 15;
-
-      let enemyCount;
-      if (level <= 10) {
-        enemyCount = Math.min(
-          baseEnemyCount + Math.floor(Math.sqrt(level) * 1.25),
-          maxEnemies
-        );
-      } else if (level < 40) {
-        enemyCount = Math.min(
-          baseEnemyCount + Math.floor(Math.sqrt(level) * 2),
-          maxEnemies
-        );
-      } else {
-        enemyCount = Math.min(
-          baseEnemyCount + Math.floor(Math.sqrt(level) * 2.3),
-          maxEnemies
-        );
-      }
-      return enemyCount;
-    }
+    const calculateEnemyCount = (level: number) =>
+      level === 1 ? 2 : getMaxEnemies(level);
 
     it("should follow sqrt scaling for levels 1-10", () => {
       // Level 1: 1 + floor(1 * 1.25) = 1 + 1 = 2
@@ -275,9 +255,14 @@ describe("levelGenerator", () => {
       expect(calculateEnemyCount(39)).toBeLessThanOrEqual(15);
     });
 
-    it("should cap at 20 for levels 40+", () => {
+    it("should cap at 20 for levels 40-59", () => {
       expect(calculateEnemyCount(40)).toBeLessThanOrEqual(20);
-      expect(calculateEnemyCount(100)).toBeLessThanOrEqual(20);
+      expect(calculateEnemyCount(59)).toBeLessThanOrEqual(20);
+    });
+
+    it("should allow a larger late-game field, capped at MAX_ENEMIES", () => {
+      expect(calculateEnemyCount(80)).toBeGreaterThan(calculateEnemyCount(59));
+      expect(calculateEnemyCount(200)).toBeLessThanOrEqual(GAME_CONSTANTS.MAX_ENEMIES);
     });
   });
 });

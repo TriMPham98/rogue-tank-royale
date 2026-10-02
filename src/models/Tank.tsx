@@ -14,6 +14,7 @@ import TeslaCoil from "./TeslaCoil";
 import { WeaponInstance } from "../utils/weapons";
 import { GAME_CONSTANTS } from "../constants/game";
 import { useTankCollision } from "../hooks/useTankCollision";
+import { checkVehicleCollision, resolveMove } from "../utils/vehicleCollision";
 import { usePooledProjectiles } from "../hooks/usePooledProjectiles";
 import { fx, FX_COLORS } from "./fx/fxSystem";
 
@@ -200,12 +201,19 @@ const Tank = ({ position = [0, 0, 0], isFirstPerson = false }: TankProps) => {
         intendedMovementMagnitude;
     }
 
-    if (
-      intendedMovementMagnitude !== 0 &&
-      !checkTerrainCollision(potentialX, potentialZ)
-    ) {
-      tankRef.current.position.x = potentialX;
-      tankRef.current.position.z = potentialZ;
+    const fromX = tankRef.current.position.x;
+    const fromZ = tankRef.current.position.z;
+    const resolved =
+      intendedMovementMagnitude !== 0
+        ? resolveMove(fromX, fromZ, potentialX, potentialZ, (x, z) =>
+            checkTerrainCollision(x, z) ||
+            checkVehicleCollision(undefined, GAME_CONSTANTS.TANK_RADIUS, fromX, fromZ, x, z)
+          )
+        : null;
+
+    if (resolved) {
+      tankRef.current.position.x = resolved[0];
+      tankRef.current.position.z = resolved[1];
       moved = true;
       trackSpinRef.current += intendedMovementMagnitude * moveSpeed * delta * 2.4;
 

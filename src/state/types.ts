@@ -162,6 +162,7 @@ export interface EncounterSlice {
   bossIncoming: boolean;
   bossSpawnedForLevel: number;
   bossesDefeated: number;
+  bossRewardPending: boolean;
   /** True once this run's supply has been banked into permanent progression */
   runBanked: boolean;
 

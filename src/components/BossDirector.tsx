@@ -4,6 +4,7 @@ import { useGameState } from "../utils/gameState";
 import { GAME_CONSTANTS } from "../constants/game";
 import { isBossLevel } from "../utils/enemyHitbox";
 import SoundManager from "../utils/sound";
+import { bossHealthMultiplier } from "../utils/difficulty";
 
 /** Find an open spot ~24 units from the player, inside the zone and clear of rocks. */
 const pickBossSpawn = (): [number, number, number] => {
@@ -65,7 +66,7 @@ const BossDirector = () => {
       GAME_CONSTANTS.ENEMY_TANK_BASE_HEALTH +
       s.level * GAME_CONSTANTS.ENEMY_HEALTH_SCALE_PER_LEVEL;
     const health = Math.round(
-      tankHealth * (GAME_CONSTANTS.BOSS_HEALTH_MULTIPLIER + bossIndex * 2)
+      tankHealth * bossHealthMultiplier(bossIndex)
     );
 
     s.spawnEnemy({

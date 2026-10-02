@@ -12,7 +12,11 @@ import { fx, FX_COLORS } from "./fx/fxSystem";
 import {
   setEnemyVisualPosition,
   clearEnemyVisualPosition,
+  getEnemyVisualPosition,
 } from "../utils/enemyVisualPositions";
+import { checkVehicleCollision, resolveMove } from "../utils/vehicleCollision";
+import { enemyBodyRadius } from "../utils/enemyHitbox";
+import { enemyFireInterval, enemyShotDamage } from "../utils/difficulty";
 
 interface EnemyTankProps {
   enemy: Enemy;
@@ -127,7 +131,7 @@ const EnemyTank = ({ enemy }: EnemyTankProps) => {
     // --- Shooting (Non-Bombers) ---
     if (!isBomber && turretRef.current) {
       const shootingRange = isTank ? GAME_CONSTANTS.ENEMY_TANK_SHOOTING_RANGE : GAME_CONSTANTS.ENEMY_TURRET_SHOOTING_RANGE;
-      const fireRate = isTank ? GAME_CONSTANTS.ENEMY_TANK_FIRE_RATE : GAME_CONSTANTS.ENEMY_TURRET_FIRE_RATE;
+      const fireRate = enemyFireInterval(isTank ? "tank" : "turret", getState().level);
       const currentTime = state.clock.getElapsedTime();
 
       if (distanceToPlayer < shootingRange && canShoot(currentTime, fireRate)) {
@@ -150,13 +154,7 @@ const EnemyTank = ({ enemy }: EnemyTankProps) => {
         );
 
         // Scale damage with player progression (matches prior EnemyTank tiers)
-        const playerLevel = getState().playerLevel;
-        let damage = 5;
-        if (playerLevel > 15) damage = 10;
-        if (playerLevel > 25) damage = 15;
-        if (playerLevel > 40) damage = 20;
-        if (playerLevel > 50) damage = 25;
-        if (playerLevel > 60) damage = 30;
+        const damage = enemyShotDamage(getState().playerLevel);
 
         spawnProjectile(shootPosition, projectileRotation, damage, 12);
         fx.muzzle(
@@ -233,6 +231,21 @@ const EnemyTank = ({ enemy }: EnemyTankProps) => {
             tempVectors.vectorToTank.normalize().multiplyScalar(repulsiveMagnitude);
             tempVectors.sumRepulsive.add(tempVectors.vectorToTank);
           }
+        } else if (!isBomber && otherEnemy.type !== "bomber") {
+          // Short-range spacing from other hulls so tanks don't jam into each other
+          const at = getEnemyVisualPosition(otherEnemy.id) ?? otherEnemy.position;
+          tempVectors.obstaclePos.set(at[0], 0, at[2]);
+          tempVectors.vectorToTank.copy(currentPositionVec).sub(tempVectors.obstaclePos);
+          tempVectors.vectorToTank.y = 0;
+          const effectiveDistance =
+            tempVectors.vectorToTank.length() -
+            (tankRadius + enemyBodyRadius(otherEnemy.type));
+          if (effectiveDistance < 2.5) {
+            tempVectors.vectorToTank
+              .normalize()
+              .multiplyScalar(0.6 / (Math.max(0, effectiveDistance) + epsilon));
+            tempVectors.sumRepulsive.add(tempVectors.vectorToTank);
+          }
         }
       }
 
@@ -272,9 +285,16 @@ const EnemyTank = ({ enemy }: EnemyTankProps) => {
         const potentialZ =
           currentPositionVec.z + tempVectors.moveDirection.z * delta * moveSpeed;
 
-        if (!checkTerrainCollision(potentialX, potentialZ)) {
-          tankRef.current.position.x = potentialX;
-          tankRef.current.position.z = potentialZ;
+        const fromX = currentPositionVec.x;
+        const fromZ = currentPositionVec.z;
+        const resolved = resolveMove(fromX, fromZ, potentialX, potentialZ, (x, z) =>
+          checkTerrainCollision(x, z) ||
+          checkVehicleCollision(enemy.id, tankRadius, fromX, fromZ, x, z)
+        );
+
+        if (resolved) {
+          tankRef.current.position.x = resolved[0];
+          tankRef.current.position.z = resolved[1];
           trackSpinRef.current += moveSpeed * delta * 2.4;
 
           if (isTank) {

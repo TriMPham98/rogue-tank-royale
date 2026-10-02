@@ -48,6 +48,13 @@ describe("boss gating", () => {
     expect(s.bossActive).toBe(false);
     expect(s.bossesDefeated).toBe(1);
     expect(s.level).toBe(11);
+    expect(s.showWeaponSelection).toBe(true);
+  });
+
+  it("does not offer a secondary weapon on a regular level-up", () => {
+    useGameState.setState({ level: 9, bossRewardPending: false });
+    useGameState.getState().advanceLevel();
+    expect(useGameState.getState().showWeaponSelection).toBe(false);
   });
 });
 

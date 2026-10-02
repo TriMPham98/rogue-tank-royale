@@ -19,6 +19,7 @@ import { useTankCollision } from "../hooks/useTankCollision";
 import { usePooledProjectiles } from "../hooks/usePooledProjectiles";
 import { fx, FX_COLORS } from "./fx/fxSystem";
 import { bombardment } from "../systems/bombardment";
+import { checkVehicleCollision, resolveMove } from "../utils/vehicleCollision";
 import SoundManager from "../utils/sound";
 import {
   setEnemyVisualPosition,
@@ -193,17 +194,23 @@ const BossTank = ({ enemy }: BossTankProps) => {
       const speed = (enemy.speed ?? GAME_CONSTANTS.BOSS_SPEED) * (enraged ? 1.35 : 1);
       const nx = pos.x + Math.sin(tankRotationRef.current) * delta * speed;
       const nz = pos.z + Math.cos(tankRotationRef.current) * delta * speed;
-      if (!checkTerrainCollision(nx, nz)) {
-        pos.x = nx;
-        pos.z = nz;
+      const fromX = pos.x;
+      const fromZ = pos.z;
+      const resolved = resolveMove(fromX, fromZ, nx, nz, (x, z) =>
+        checkTerrainCollision(x, z) ||
+        checkVehicleCollision(enemy.id, GAME_CONSTANTS.BOSS_RADIUS, fromX, fromZ, x, z)
+      );
+      if (resolved) {
+        pos.x = resolved[0];
+        pos.z = resolved[1];
         trackSpinRef.current += speed * delta * 1.4;
         dustTimerRef.current -= delta;
         if (dustTimerRef.current <= 0) {
           dustTimerRef.current = 0.1;
           const bx = Math.sin(tankRotationRef.current);
           const bz = Math.cos(tankRotationRef.current);
-          fx.dust(nx - bx * 2.2 - bz * 1.4, nz - bz * 2.2 + bx * 1.4, 1.4);
-          fx.dust(nx - bx * 2.2 + bz * 1.4, nz - bz * 2.2 - bx * 1.4, 1.4);
+          fx.dust(pos.x - bx * 2.2 - bz * 1.4, pos.z - bz * 2.2 + bx * 1.4, 1.4);
+          fx.dust(pos.x - bx * 2.2 + bz * 1.4, pos.z - bz * 2.2 - bx * 1.4, 1.4);
         }
         setEnemyVisualPosition(enemy.id, [pos.x, pos.y, pos.z]);
         if (Math.random() < 0.15) {

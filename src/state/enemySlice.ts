@@ -75,6 +75,7 @@ export const createEnemySlice: StateCreator<
         set((s) => ({
           bossActive: false,
           bossesDefeated: s.bossesDefeated + 1,
+          bossRewardPending: true,
           enemiesDefeated: Math.max(
             s.enemiesDefeated,
             s.enemiesRequiredForNextLevel - 1

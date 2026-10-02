@@ -41,6 +41,7 @@ const SAMPLES: Record<string, string> = {
   zoneWarning: "./assets/sounds/zoneWarning.mp3",
   teslaZap: "./assets/sounds/teslaZap.mp3",
   deployTank: "./assets/sounds/deployTank.mp3",
+  shellImpact: "./assets/sounds/shellImpact.mp3",
 };
 
 type SynthLayer = "thump" | "boom" | "crack";
@@ -71,6 +72,9 @@ const PROFILES: Record<string, SoundProfile> = {
   levelUp: { reverb: 0.08, maxVoices: 2 },
   deployTank: { reverb: 0.2, maxVoices: 1, layers: ["boom"] },
   zoneWarning: { reverb: 0.1, maxVoices: 1 },
+  redZoneSiren: { reverb: 0.75, maxVoices: 1 },
+  bombWhistle: { reverb: 0.2, maxVoices: 3 },
+  bombBlast: { reverb: 0.45, maxVoices: 6 },
 };
 
 type SynthFn = (ctx: AudioContext, out: AudioNode, t: number, gain: number) => number;
@@ -290,6 +294,28 @@ class SoundManager {
     return src;
   }
 
+  /** Play a decoded sample as a layer inside a synth voice. */
+  private sample(
+    ctx: AudioContext,
+    out: AudioNode,
+    t: number,
+    id: string,
+    rate: number,
+    gain: number,
+    offset = 0,
+    duration?: number
+  ): void {
+    const buffer = this.buffers.get(id);
+    if (!buffer) return;
+    const src = ctx.createBufferSource();
+    src.buffer = buffer;
+    src.playbackRate.value = rate;
+    const g = ctx.createGain();
+    g.gain.value = gain;
+    src.connect(g).connect(out);
+    src.start(t, offset, duration);
+  }
+
   private layer(kind: SynthLayer, out: AudioNode, t: number, gain: number): void {
     const ctx = this.ctx!;
     switch (kind) {
@@ -307,55 +333,122 @@ class SoundManager {
   }
 
   private registerSynths(): void {
-    // Rising/falling air-raid siren for the red zone warning
+    // Distant air-raid siren: a rotor-driven horn, not an oscillator beep.
+    // Detuned saw stack + sub-octave square through a horn-shaped band, slow
+    // wind-up / wind-down glide, rotating-horn tremolo, then pushed far back
+    // with heavy lowpass and a big reverb send (see PROFILES.redZoneSiren).
     this.synths.set("redZoneSiren", (ctx, out, t, g) => {
-      const dur = 2.6;
-      const lp = ctx.createBiquadFilter();
-      lp.type = "lowpass";
-      lp.frequency.value = 1800;
-      lp.connect(out);
-      for (const detune of [0, 7]) {
+      const dur = 4.4;
+      const peak = 0.22 * g;
+
+      const hp = ctx.createBiquadFilter();
+      hp.type = "highpass";
+      hp.frequency.value = 110;
+      const horn = ctx.createBiquadFilter();
+      horn.type = "peaking";
+      horn.frequency.value = 650;
+      horn.Q.value = 1.1;
+      horn.gain.value = 7;
+      const distance = ctx.createBiquadFilter();
+      distance.type = "lowpass";
+      distance.frequency.value = 1300;
+      distance.Q.value = 0.5;
+
+      // Rotating horn: amplitude swells as the mouth sweeps past the listener
+      const tremolo = ctx.createGain();
+      tremolo.gain.value = 0.75;
+      const lfo = ctx.createOscillator();
+      lfo.frequency.value = 1.3;
+      const lfoDepth = ctx.createGain();
+      lfoDepth.gain.value = 0.25;
+      lfo.connect(lfoDepth).connect(tremolo.gain);
+
+      const env = ctx.createGain();
+      env.gain.setValueAtTime(0.0001, t);
+      env.gain.linearRampToValueAtTime(peak, t + 1.1);
+      env.gain.setValueAtTime(peak, t + 2.8);
+      env.gain.linearRampToValueAtTime(0.0001, t + dur);
+
+      hp.connect(horn).connect(distance).connect(tremolo).connect(env).connect(out);
+
+      const glide = (f: AudioParam, scale: number) => {
+        f.setValueAtTime(110 * scale, t);
+        f.exponentialRampToValueAtTime(410 * scale, t + 1.7);
+        f.setValueAtTime(410 * scale, t + 2.6);
+        f.exponentialRampToValueAtTime(190 * scale, t + dur);
+      };
+      const voices: [OscillatorType, number, number, number][] = [
+        ["sawtooth", 1, -9, 0.45],
+        ["sawtooth", 1, 8, 0.45],
+        ["sawtooth", 1.5, 3, 0.18], // the siren's characteristic fifth
+        ["square", 0.5, 0, 0.22],
+      ];
+      for (const [type, scale, detune, level] of voices) {
         const osc = ctx.createOscillator();
-        osc.type = "sawtooth";
+        osc.type = type;
         osc.detune.value = detune;
-        osc.frequency.setValueAtTime(320, t);
-        osc.frequency.linearRampToValueAtTime(760, t + dur * 0.45);
-        osc.frequency.linearRampToValueAtTime(540, t + dur);
-        const env = ctx.createGain();
-        env.gain.setValueAtTime(0.0001, t);
-        env.gain.linearRampToValueAtTime(0.16 * g, t + 0.35);
-        env.gain.setValueAtTime(0.16 * g, t + dur - 0.6);
-        env.gain.linearRampToValueAtTime(0.0001, t + dur);
-        osc.connect(env).connect(lp);
+        glide(osc.frequency, scale);
+        const vg = ctx.createGain();
+        vg.gain.value = level;
+        osc.connect(vg).connect(hp);
         osc.start(t);
         osc.stop(t + dur + 0.05);
       }
+      // Wind/rotor hiss under the tone
+      this.noiseBurst(ctx, distance, t, dur, 0.05, "bandpass", 500, 900, 1.0);
+      lfo.start(t);
+      lfo.stop(t + dur + 0.05);
       return dur;
     });
 
-    // Falling-shell whistle
+    // Incoming shell: air tearing past (swept band of noise) with only a
+    // faint tonal core, rather than a cartoon sine whistle
     this.synths.set("bombWhistle", (ctx, out, t, g) => {
-      const dur = 1.0;
-      const osc = ctx.createOscillator();
-      osc.type = "sine";
-      osc.frequency.setValueAtTime(2100, t);
-      osc.frequency.exponentialRampToValueAtTime(520, t + dur);
+      const dur = 0.95;
+      const src = ctx.createBufferSource();
+      src.buffer = this.noise;
+      src.loop = true;
+      const band = ctx.createBiquadFilter();
+      band.type = "bandpass";
+      band.Q.value = 5;
+      band.frequency.setValueAtTime(3400, t);
+      band.frequency.exponentialRampToValueAtTime(650, t + dur);
       const env = ctx.createGain();
       env.gain.setValueAtTime(0.0001, t);
-      env.gain.linearRampToValueAtTime(0.12 * g, t + dur * 0.7);
+      env.gain.exponentialRampToValueAtTime(0.6 * g, t + dur * 0.85);
       env.gain.linearRampToValueAtTime(0.0001, t + dur);
-      osc.connect(env).connect(out);
-      osc.start(t);
-      osc.stop(t + dur + 0.05);
+      src.connect(band).connect(env).connect(out);
+      src.start(t, Math.random());
+      src.stop(t + dur + 0.05);
+
+      const core = ctx.createOscillator();
+      core.type = "triangle";
+      core.frequency.setValueAtTime(1500, t);
+      core.frequency.exponentialRampToValueAtTime(480, t + dur);
+      const coreEnv = ctx.createGain();
+      coreEnv.gain.setValueAtTime(0.0001, t);
+      coreEnv.gain.exponentialRampToValueAtTime(0.035 * g, t + dur * 0.8);
+      coreEnv.gain.linearRampToValueAtTime(0.0001, t + dur);
+      core.connect(coreEnv).connect(out);
+      core.start(t);
+      core.stop(t + dur + 0.05);
       return dur;
     });
 
-    // Artillery impact: crack, body, sub tail
+    // Artillery impact built on real recordings: the explosion sample pitched
+    // down for weight, a metal-impact transient, a sub drop, a long ground
+    // rumble and scattered debris after the hit
     this.synths.set("bombBlast", (ctx, out, t, g) => {
-      this.noiseBurst(ctx, out, t, 0.08, 0.7 * g, "highpass", 1800, 900, 0.001);
-      this.noiseBurst(ctx, out, t, 0.9, 0.8 * g, "lowpass", 2400, 90);
-      this.tone(ctx, out, "sine", t, 80, 26, 0.9, 1.1 * g, 0.006);
-      return 1.0;
+      const rate = 0.6 + Math.random() * 0.12;
+      this.sample(ctx, out, t, "npcImpact", rate, 1.3 * g);
+      this.sample(ctx, out, t, "shellImpact", 0.75 + Math.random() * 0.1, 0.35 * g, 0.117);
+      this.tone(ctx, out, "sine", t, 62, 24, 1.3, 1.0 * g, 0.004);
+      this.noiseBurst(ctx, out, t + 0.02, 1.9, 0.45 * g, "lowpass", 700, 45, 0.02);
+      for (let i = 0; i < 5; i++) {
+        const at = t + 0.18 + Math.random() * 0.55;
+        this.noiseBurst(ctx, out, at, 0.04, (0.06 + Math.random() * 0.06) * g, "bandpass", 2500, 1800, 0.001);
+      }
+      return 2.0;
     });
 
     // Klaxon for a boss entering the arena
@@ -436,7 +529,12 @@ class SoundManager {
     }
   }
 
-  private startVoice(id: string, loop: boolean, volume: number): Voice | null {
+  private startVoice(
+    id: string,
+    loop: boolean,
+    volume: number,
+    lowpassHz?: number
+  ): Voice | null {
     const ctx = this.ctx!;
     const t = ctx.currentTime;
     const profile = PROFILES[id] || {};
@@ -447,11 +545,20 @@ class SoundManager {
 
     const gain = ctx.createGain();
     gain.gain.value = effective;
-    gain.connect(this.busIn!);
+    // Optional air absorption: far sounds lose their top end before the bus
+    let dry: AudioNode = gain;
+    if (lowpassHz !== undefined) {
+      const air = ctx.createBiquadFilter();
+      air.type = "lowpass";
+      air.frequency.value = lowpassHz;
+      gain.connect(air);
+      dry = air;
+    }
+    dry.connect(this.busIn!);
     if (profile.reverb) {
       const send = ctx.createGain();
       send.gain.value = profile.reverb;
-      gain.connect(send).connect(this.reverbIn!);
+      dry.connect(send).connect(this.reverbIn!);
     }
 
     const synth = this.synths.get(id);
@@ -523,6 +630,26 @@ class SoundManager {
   public playAt(id: string, volume: number, minDelay = 0): void {
     this.setVolume(id, volume);
     this.play(id, minDelay);
+  }
+
+  /**
+   * Play at a world distance from the listener: gain falls off and the top
+   * end rolls away, so far shelling rumbles instead of sounding thin.
+   */
+  public playSpatial(id: string, volume: number, distance: number, minDelay = 0): void {
+    if (!this.ctx) {
+      this.playAt(id, volume * Math.max(0.05, 1 - distance / 55), minDelay);
+      return;
+    }
+    const now = Date.now();
+    if (now - (this.lastPlayTime.get(id) || 0) < minDelay) return;
+    if (this.ctx.state === "suspended") this.ctx.resume().catch(() => undefined);
+    const d = Math.max(0, distance);
+    const falloff = 1 / (1 + (d / 14) ** 2);
+    const cutoff = 18000 * Math.exp(-d / 12) + 450;
+    const voice = this.startVoice(id, false, volume * Math.max(0.04, falloff), cutoff);
+    if (voice) this.trackVoice(id, voice, PROFILES[id]?.maxVoices ?? 4);
+    this.lastPlayTime.set(id, now);
   }
 
   public stop(id: string): void {

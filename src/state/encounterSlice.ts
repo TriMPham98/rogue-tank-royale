@@ -12,6 +12,8 @@ export const initialEncounterState = {
   bossIncoming: false,
   bossSpawnedForLevel: 0,
   bossesDefeated: 0,
+  /** Boss just died: next level-up offers a secondary weapon */
+  bossRewardPending: false,
   runBanked: false,
 };
 

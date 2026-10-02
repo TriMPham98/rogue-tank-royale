@@ -223,13 +223,23 @@ export const createGameFlowSlice: StateCreator<
         state.safeZoneCenter
       );
 
+      // Secondary weapons are only earned by destroying a boss
+      const offerWeapon =
+        state.bossRewardPending &&
+        state.selectedWeapons.length < GAME_CONSTANTS.MAX_SIDE_WEAPONS;
+      const showUpgradeUI = newLevel <= GAME_CONSTANTS.UPGRADE_UI_MAX_LEVEL;
+
       return {
         level: newLevel,
         playerLevel: newLevel,
+        bossRewardPending: false,
+        showWeaponSelection: offerWeapon,
+        // Past the upgrade levels nothing else pauses for the weapon picker
+        ...(offerWeapon && !showUpgradeUI ? { isPaused: true } : {}),
         playerDamage: state.playerDamage + 5,
         playerTurretDamage: newTurretDamage,
         enemiesRequiredForNextLevel: nextLevelRequirement,
-        showUpgradeUI: newLevel <= GAME_CONSTANTS.UPGRADE_UI_MAX_LEVEL,
+        showUpgradeUI,
         availableUpgrades,
         ...safeZoneUpdates,
       };
