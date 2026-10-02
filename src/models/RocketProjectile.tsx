@@ -1,150 +1,12 @@
 // src/components/RocketProjectile.tsx
-import { useRef, useState, useEffect } from "react";
+import { useRef, useEffect } from "react";
 import { useFrame } from "@react-three/fiber";
-import { Sphere, Box, Cylinder, Cone } from "@react-three/drei";
-import {
-  Mesh,
-  Vector3,
-  MeshStandardMaterial,
-  Color,
-  Group,
-  AdditiveBlending,
-  PointLight,
-} from "three";
+import { Mesh, Vector3, Group } from "three";
 import { useGameState } from "../utils/gameState";
 import { debug } from "../utils/debug";
-
-// --- Improved Explosion Effect Component ---
-
-interface ExplosionEffectProps {
-  position: Vector3;
-  size?: number;
-  duration?: number;
-  baseColor?: string;
-  flashColor?: string;
-  onComplete: () => void;
-}
-
-const ExplosionEffect = ({
-  position,
-  size = 5, // Base radius of the main explosion
-  duration = 0.5, // Total duration
-  baseColor = "#FFA500", // Orange/Yellow core
-  flashColor = "#FFFFFF", // Initial white flash
-  onComplete,
-}: ExplosionEffectProps) => {
-  const groupRef = useRef<Group>(null);
-  const flashMeshRef = useRef<Mesh>(null);
-  const flashMaterialRef = useRef<MeshStandardMaterial>(null);
-  const coreMeshRef = useRef<Mesh>(null);
-  const coreMaterialRef = useRef<MeshStandardMaterial>(null);
-  const lightRef = useRef<PointLight>(null);
-  const startTimeRef = useRef<number | null>(null);
-
-  const flashDuration = duration * 0.3; // Flash lasts for the first 30%
-  const coreDuration = duration * 0.9; // Core expands for 90%
-
-  useFrame(({ clock }) => {
-    if (
-      !groupRef.current ||
-      !flashMeshRef.current ||
-      !flashMaterialRef.current ||
-      !coreMeshRef.current ||
-      !coreMaterialRef.current ||
-      !lightRef.current
-    )
-      return;
-
-    if (startTimeRef.current === null) {
-      startTimeRef.current = clock.elapsedTime;
-    }
-
-    const elapsedTime = clock.elapsedTime - startTimeRef.current;
-    const overallProgress = Math.min(elapsedTime / duration, 1);
-
-    // Flash effect
-    const flashProgress = Math.min(elapsedTime / flashDuration, 1);
-    if (flashProgress < 1) {
-      const flashScale = flashProgress * size * 0.8; // Flash is slightly smaller
-      flashMeshRef.current.scale.set(flashScale, flashScale, flashScale);
-      flashMaterialRef.current.opacity = (1.0 - flashProgress) * 0.8; // Rapid fade
-      flashMaterialRef.current.emissiveIntensity = (1.0 - flashProgress) * 10;
-      lightRef.current.intensity = (1.0 - flashProgress) * 5; // Intense initial light
-      lightRef.current.distance = size * 2;
-    } else {
-      flashMeshRef.current.visible = false; // Hide flash after its duration
-      lightRef.current.intensity = 0; // Turn off main flash light quickly
-    }
-
-    // Core explosion effect
-    const coreProgress = Math.min(elapsedTime / coreDuration, 1);
-    const currentScale = coreProgress * size;
-    coreMeshRef.current.scale.set(currentScale, currentScale, currentScale);
-    coreMaterialRef.current.opacity = (1.0 - coreProgress) * 0.9; // Slower fade than flash
-    coreMaterialRef.current.emissiveIntensity = (1.0 - coreProgress) * 4;
-
-    if (overallProgress >= 1) {
-      onComplete();
-    }
-  });
-
-  useEffect(() => {
-    debug.log("ExplosionEffect mounted");
-    return () => {
-      debug.log("ExplosionEffect unmounted");
-    };
-  }, [onComplete]);
-
-  return (
-    <group ref={groupRef} position={position}>
-      {/* Initial Flash Sphere */}
-      <Sphere ref={flashMeshRef} args={[1, 16, 16]} scale={[0.01, 0.01, 0.01]}>
-        <meshStandardMaterial
-          ref={flashMaterialRef}
-          color={flashColor}
-          emissive={new Color(flashColor)}
-          emissiveIntensity={10}
-          transparent={true}
-          opacity={0.8}
-          depthWrite={false}
-          blending={AdditiveBlending} // Make it glow brighter
-        />
-      </Sphere>
-      {/* Core Explosion Sphere */}
-      <Sphere ref={coreMeshRef} args={[1, 32, 32]} scale={[0.01, 0.01, 0.01]}>
-        <meshStandardMaterial
-          ref={coreMaterialRef}
-          color={baseColor}
-          emissive={new Color(baseColor)}
-          emissiveIntensity={4}
-          transparent={true}
-          opacity={0.9}
-          depthWrite={false}
-          // blending={AdditiveBlending} // Optional: makes it glowier
-        />
-      </Sphere>
-      {/* Point Light for illumination */}
-      <pointLight
-        ref={lightRef}
-        color={flashColor} // Start with flash color
-        intensity={5}
-        distance={size * 2}
-        decay={2}
-      />
-      {/* Fainter, longer lasting light from the core */}
-      <pointLight
-        color={baseColor}
-        intensity={
-          coreMaterialRef.current
-            ? coreMaterialRef.current.emissiveIntensity * 0.5
-            : 0
-        } // Linked to core intensity
-        distance={size * 1.5}
-        decay={2.5}
-      />
-    </group>
-  );
-};
+import { fx } from "./fx/fxSystem";
+import GlowSprite from "./fx/GlowSprite";
+import { ROCKET_MATS } from "./weaponVisuals/weaponMaterials";
 
 // --- Rocket Projectile Component ---
 
@@ -170,7 +32,7 @@ const RocketProjectile = ({
   const projectileGroupRef = useRef<Group>(null);
   const visualGroupRef = useRef<Group>(null); // Inner group for pitch and model details
   const flameRef = useRef<Mesh>(null); // Ref for the flame mesh
-  const flameLightRef = useRef<PointLight>(null); // Ref for the flame light
+  const trailTimerRef = useRef(0);
 
   const hasExplodedRef = useRef(false);
   const initialPositionRef = useRef<Vector3>(new Vector3(...position));
@@ -178,14 +40,8 @@ const RocketProjectile = ({
   const ageRef = useRef(0);
   const targetPositionRef = useRef<Vector3 | null>(null);
 
-  const [isExploding, setIsExploding] = useState(false);
-  const [explosionPosition, setExplosionPosition] = useState<Vector3 | null>(
-    null
-  );
-
   const maxHeight = 3; // Arc height
   const splashRadius = 5; // Reduced from 10 to 5 for smaller splash damage radius
-  const visualExplosionSize = splashRadius * 0.8; // Control visual size separately
 
   const damageEnemy = useGameState((state) => state.damageEnemy);
   const playerBulletVelocity = useGameState(
@@ -225,8 +81,7 @@ const RocketProjectile = ({
       )}, ${explosionPos.y.toFixed(2)}, ${explosionPos.z.toFixed(2)}]`
     );
 
-    setExplosionPosition(explosionPos.clone());
-    setIsExploding(true); // Trigger rendering of ExplosionEffect
+    fx.blast(explosionPos.x, explosionPos.y, explosionPos.z, splashRadius);
 
     // --- Damage Calculation (Functionality unchanged) ---
     const enemies = getState().enemies;
@@ -252,38 +107,19 @@ const RocketProjectile = ({
     }
     debug.log(`Rocket ${id} explosion damaged ${hitCount} enemies.`);
     // --- End Damage Calculation ---
+
+    // Blast visuals live in the shared FX layer, so the shell can go immediately
+    onRemove(id);
   };
 
-  useFrame(({}, delta) => {
-    // If exploding, the ExplosionEffect component handles its own logic/removal
-    if (isExploding || isPaused || isGameOver) {
-      if (isExploding && !projectileGroupRef.current) {
-        // If exploding and the group is gone, likely already handled by onComplete
-      }
-      return;
-    }
+  useFrame((_, delta) => {
+    if (hasExplodedRef.current || isPaused || isGameOver) return;
 
     // Check if the projectile group still exists before proceeding
     if (!projectileGroupRef.current || !visualGroupRef.current) {
-      if (!hasExplodedRef.current) {
-        // If not exploded and ref is gone, schedule removal safely
-        debug.warn(`Rocket ${id} refs lost unexpectedly. Removing.`);
-        onRemove(id);
-      }
+      debug.warn(`Rocket ${id} refs lost unexpectedly. Removing.`);
+      onRemove(id);
       return;
-    }
-
-    // Double-check if already exploded (safety)
-    if (hasExplodedRef.current) {
-      if (!isExploding) {
-        // Should be exploding if flag is true
-        debug.warn(
-          `Rocket ${id} hasExplodedRef is true but isExploding is false. Forcing explosion state.`
-        );
-        setExplosionPosition(projectileGroupRef.current.position.clone());
-        setIsExploding(true);
-      }
-      return; // Explosion effect handles removal via onComplete
     }
 
     ageRef.current += delta;
@@ -362,11 +198,16 @@ const RocketProjectile = ({
     // Keep Y rotation (yaw) on the outer group aligned with initial firing direction
     projectileGroupRef.current.rotation.y = rotation;
 
-    // --- Flame Flicker ---
-    if (flameRef.current && flameLightRef.current) {
-      const flicker = Math.random() * 0.2 + 0.9; // Random scale between 0.9 and 1.1
-      flameRef.current.scale.set(flicker * 0.15, flicker * 0.15, flicker * 0.3); // Adjust base size if needed
-      flameLightRef.current.intensity = (Math.random() * 0.5 + 1.5) * flicker; // Random intensity flicker
+    // --- Flame flicker + exhaust trail ---
+    if (flameRef.current) {
+      const flicker = Math.random() * 0.35 + 0.85;
+      flameRef.current.scale.set(flicker, flicker * (0.9 + Math.random() * 0.5), flicker);
+    }
+    trailTimerRef.current -= delta;
+    if (trailTimerRef.current <= 0) {
+      trailTimerRef.current = 0.025;
+      const p = projectileGroupRef.current.position;
+      fx.trail(p.x - Math.sin(rotation) * 0.4, p.y, p.z - Math.cos(rotation) * 0.4);
     }
 
     // --- Collision and Boundary Checks (Functionality unchanged) ---
@@ -468,119 +309,40 @@ const RocketProjectile = ({
     }
   });
 
-  // --- Conditional Rendering ---
-  if (isExploding && explosionPosition) {
-    // Render the improved explosion effect
-    return (
-      <ExplosionEffect
-        position={explosionPosition}
-        size={visualExplosionSize} // Use the visual size
-        duration={0.6} // Slightly longer duration for visual appeal
-        onComplete={() => {
-          debug.log(
-            `ExplosionEffect onComplete called for rocket ${id}. Removing projectile.`
-          );
-          onRemove(id); // Remove the projectile *after* the explosion effect finishes
-        }}
-      />
-    );
-  }
-
-  // Render the improved rocket model
   return (
     <group
       ref={projectileGroupRef}
       position={position}
       rotation={[0, rotation, 0]} // Yaw handled by the outer group
-      visible={!hasExplodedRef.current} // Hide the model immediately on explosion trigger
     >
-      <group ref={visualGroupRef} rotation={[0, 0, 0]}>
-        {" "}
-        {/* Inner group handles pitch */}
-        {/* Rocket Nose Cone */}
-        <Cone
-          args={[0.15, 0.3, 8]}
-          position={[0, 0, 0.25]}
-          rotation={[Math.PI / 2, 0, 0]}>
-          <meshStandardMaterial
-            color="#E05A27" // Brighter orange-red
-            metalness={0.4}
-            roughness={0.5}
-          />
-        </Cone>
-        {/* Rocket Body */}
-        <Cylinder
-          args={[0.15, 0.15, 0.6, 12]}
-          position={[0, 0, -0.1]}
-          rotation={[Math.PI / 2, 0, 0]}>
-          <meshStandardMaterial
-            color="#A0401A" // Darker body
-            metalness={0.5}
-            roughness={0.4}
-          />
-        </Cylinder>
-        {/* Rocket Nozzle */}
-        <Cylinder
-          args={[0.12, 0.14, 0.1, 12]}
-          position={[0, 0, -0.45]}
-          rotation={[Math.PI / 2, 0, 0]}>
-          <meshStandardMaterial
-            color="#444444" // Dark metallic nozzle
-            metalness={0.8}
-            roughness={0.3}
-          />
-        </Cylinder>
-        {/* Fins (Thinner, more detailed) */}
-        <Box // Fin 1 (Top)
-          args={[0.03, 0.25, 0.2]} // Thinner fin
-          position={[0, 0.16, -0.25]}
-          rotation={[0, 0, 0]} // Align with body
-        >
-          <meshStandardMaterial color="#903815" roughness={0.6} />
-        </Box>
-        <Box // Fin 2 (Bottom)
-          args={[0.03, 0.25, 0.2]}
-          position={[0, -0.16, -0.25]}
-          rotation={[0, 0, 0]}>
-          <meshStandardMaterial color="#903815" roughness={0.6} />
-        </Box>
-        <Box // Fin 3 (Right)
-          args={[0.25, 0.03, 0.2]}
-          position={[0.16, 0, -0.25]}
-          rotation={[0, 0, 0]}>
-          <meshStandardMaterial color="#903815" roughness={0.6} />
-        </Box>
-        <Box // Fin 4 (Left)
-          args={[0.25, 0.03, 0.2]}
-          position={[-0.16, 0, -0.25]}
-          rotation={[0, 0, 0]}>
-          <meshStandardMaterial color="#903815" roughness={0.6} />
-        </Box>
-        {/* Rocket flame effect - Slightly elongated sphere */}
-        <Sphere
-          ref={flameRef}
-          args={[1, 12, 8]}
-          position={[0, 0, -0.6]}
-          scale={[0.15, 0.15, 0.3]}>
-          <meshStandardMaterial
-            color="#FFAA00"
-            emissive="#FF6600"
-            emissiveIntensity={4} // Brighter emissive
-            transparent={true}
-            opacity={0.85}
-            depthWrite={false}
-            blending={AdditiveBlending} // Makes the flame glow
-          />
-        </Sphere>
-        {/* Point light for the flame */}
-        <pointLight
-          ref={flameLightRef}
-          color="#FF8800" // Orange light
-          intensity={2.0}
-          distance={3}
-          decay={2}
-          position={[0, 0, -0.5]} // Position slightly ahead of the visual flame
-        />
+      {/* Inner group handles pitch */}
+      <group ref={visualGroupRef}>
+        <mesh position={[0, 0, 0.36]} rotation={[Math.PI / 2, 0, 0]} material={ROCKET_MATS.nose} castShadow>
+          <coneGeometry args={[0.085, 0.22, 12]} />
+        </mesh>
+        <mesh position={[0, 0, 0.0]} rotation={[Math.PI / 2, 0, 0]} material={ROCKET_MATS.body} castShadow>
+          <cylinderGeometry args={[0.085, 0.085, 0.5, 12]} />
+        </mesh>
+        <mesh position={[0, 0, 0.17]} rotation={[Math.PI / 2, 0, 0]} material={ROCKET_MATS.band}>
+          <cylinderGeometry args={[0.088, 0.088, 0.06, 12]} />
+        </mesh>
+        <mesh position={[0, 0, -0.29]} rotation={[Math.PI / 2, 0, 0]} material={ROCKET_MATS.dark}>
+          <cylinderGeometry args={[0.07, 0.06, 0.08, 12]} />
+        </mesh>
+        {[0, 1, 2, 3].map((i) => (
+          <mesh
+            key={i}
+            position={[Math.cos((i * Math.PI) / 2) * 0.11, Math.sin((i * Math.PI) / 2) * 0.11, -0.18]}
+            rotation={[0, 0, (i * Math.PI) / 2]}
+            material={ROCKET_MATS.band}>
+            <boxGeometry args={[0.1, 0.015, 0.16]} />
+          </mesh>
+        ))}
+        {/* Exhaust plume + glow (no point light: those trigger material recompiles) */}
+        <mesh ref={flameRef} position={[0, 0, -0.5]} rotation={[-Math.PI / 2, 0, 0]} material={ROCKET_MATS.flame}>
+          <coneGeometry args={[0.065, 0.38, 10, 1, true]} />
+        </mesh>
+        <GlowSprite color="#ff9a3a" size={0.9} opacity={0.8} position={[0, 0, -0.38]} />
       </group>
     </group>
   );

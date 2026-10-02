@@ -1,10 +1,14 @@
 import { Canvas, useThree, useFrame } from "@react-three/fiber";
-import { Sky, OrbitControls } from "@react-three/drei";
+import { Sky, OrbitControls, Environment, Lightformer } from "@react-three/drei";
 import Tank from "../models/Tank";
 import EnemyTank from "../models/EnemyTank";
 import PowerUpItem from "../models/PowerUpItem";
 import Ground from "../models/Ground";
-import TerrainObstacle from "../models/TerrainObstacle";
+import RockField from "../models/environment/RockField";
+import ArenaPerimeter from "../models/environment/ArenaPerimeter";
+import GrassField from "../models/environment/GrassField";
+import FxLayer from "../models/fx/FxLayer";
+import ShaderWarmup from "../models/fx/ShaderWarmup";
 import SafeZone from "../models/SafeZone";
 import {
   Suspense,
@@ -79,6 +83,27 @@ const useLightIntensity = () => {
   const sunElevation = Math.max(5, 20 - (level / 40) * 15); // 20-5, lower is sunset
   const sunAzimuth = 180; // Fixed azimuth (180 = north)
 
+  // Sun direction shared by the sky dome and the shadow-casting light (slightly
+  // off-axis so hull faces pick up a warm key from front-left)
+  const elevationRad = (sunElevation * Math.PI) / 180 + 0.35;
+  const azimuthRad = Math.PI * 0.8;
+  const sunDirection: [number, number, number] = [
+    Math.cos(elevationRad) * Math.sin(azimuthRad),
+    Math.sin(elevationRad),
+    Math.cos(elevationRad) * Math.cos(azimuthRad),
+  ];
+
+  // Hemisphere fill: daylight sky/bounce drifting to moonlit blue as levels climb
+  const hemiSky = `rgb(${Math.round(190 - nightFactor * 150)}, ${Math.round(
+    214 - nightFactor * 140
+  )}, ${Math.round(255 - nightFactor * 90)})`;
+  const hemiGround = `rgb(${Math.round(92 - nightFactor * 70)}, ${Math.round(
+    84 - nightFactor * 60
+  )}, ${Math.round(58 - nightFactor * 30)})`;
+  const sunColor = `rgb(255, ${Math.round(240 - nightFactor * 70)}, ${Math.round(
+    214 - nightFactor * 110
+  )})`;
+
   return {
     ambientIntensity,
     ambientR,
@@ -96,7 +121,31 @@ const useLightIntensity = () => {
     rayleigh,
     sunElevation,
     sunAzimuth,
+    sunDirection,
+    nightFactor,
+    hemiSky,
+    hemiGround,
+    sunColor,
   };
+};
+
+/**
+ * Image-based lighting from a few soft light cards. Without an environment map,
+ * metallic hull and weapon materials reflect pure black and read as flat.
+ * Re-rendered (cheaply, 64px) only when the day/night bucket changes.
+ */
+const BattlefieldEnvironment = ({ nightFactor }: { nightFactor: number }) => {
+  const bucket = Math.round(nightFactor * 8) / 8;
+  const day = 1 - bucket * 0.85;
+  return (
+    <Environment key={bucket} resolution={64} frames={1}>
+      <color attach="background" args={[0.09 * day, 0.1 * day, 0.11 * day]} />
+      <Lightformer form="rect" intensity={1.6 * day} color="#cfe3ff" scale={[30, 30, 1]} position={[0, 12, 0]} />
+      <Lightformer form="rect" intensity={2.4 * day} color="#ffe2b8" scale={[10, 4, 1]} position={[-14, 6, 10]} />
+      <Lightformer form="rect" intensity={0.8 * day} color="#9fb8ff" scale={[10, 4, 1]} position={[14, 4, -10]} />
+      <Lightformer form="rect" intensity={0.55 * day} color="#6b6a45" scale={[40, 40, 1]} position={[0, -6, 0]} />
+    </Environment>
+  );
 };
 
 // Error boundary component to catch and display errors
@@ -659,13 +708,14 @@ const SpatialHashManager = () => {
 const SceneContent = memo((): JSX.Element => {
   const {
     ambientIntensity,
-    ambientR,
-    ambientG,
-    ambientB,
     directionalIntensity,
     turbidity,
     rayleigh,
-    sunAzimuth,
+    sunDirection,
+    nightFactor,
+    hemiSky,
+    hemiGround,
+    sunColor,
   } = useLightIntensity();
 
   // Optimized: Use shallow selectors instead of manual subscriptions
@@ -678,22 +728,24 @@ const SceneContent = memo((): JSX.Element => {
     <Suspense fallback={null}>
       <SpatialHashManager />
       <EnemyRespawnManager />
-      <ambientLight
-        intensity={ambientIntensity}
-        color={[ambientR, ambientG, ambientB]}
+      <BattlefieldEnvironment nightFactor={nightFactor} />
+      <hemisphereLight
+        args={[hemiSky, hemiGround, ambientIntensity * 1.6 + 0.08]}
       />
       <directionalLight
-        position={[10, 20, 10]}
-        intensity={directionalIntensity}
+        position={[sunDirection[0] * 45, sunDirection[1] * 45, sunDirection[2] * 45]}
+        color={sunColor}
+        intensity={directionalIntensity * 1.35}
         castShadow
         shadow-mapSize-width={4096}
         shadow-mapSize-height={4096}
-        shadow-camera-far={100}
-        shadow-camera-left={-50}
-        shadow-camera-right={50}
-        shadow-camera-top={50}
-        shadow-camera-bottom={-50}
-        shadow-bias={-0.0005}
+        shadow-camera-far={120}
+        shadow-camera-left={-58}
+        shadow-camera-right={58}
+        shadow-camera-top={58}
+        shadow-camera-bottom={-58}
+        shadow-bias={-0.0004}
+        shadow-normalBias={0.03}
       />
       <SpotlightUpdater />
       <IntroSpotlight />
@@ -708,15 +760,19 @@ const SceneContent = memo((): JSX.Element => {
       {powerUps.map((powerUp) => (
         <PowerUpItem key={`powerup-${powerUp.id}`} powerUp={powerUp} />
       ))}
-      {terrainObstacles.map((obstacle) => (
-        <TerrainObstacle
-          key={`obstacle-${obstacle.id}`}
-          position={obstacle.position}
-          size={obstacle.size}
-        />
-      ))}
+      <RockField obstacles={terrainObstacles} />
       <Ground />
-      <Sky turbidity={turbidity} rayleigh={rayleigh} azimuth={sunAzimuth} />
+      <GrassField />
+      <ArenaPerimeter />
+      <FxLayer />
+      <ShaderWarmup />
+      <Sky
+        turbidity={turbidity}
+        rayleigh={rayleigh}
+        sunPosition={sunDirection}
+        mieCoefficient={0.006}
+        mieDirectionalG={0.85}
+      />
       <FollowCamera />
       <OrbitControls enabled={false} />
     </Suspense>

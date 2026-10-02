@@ -15,6 +15,7 @@ import { WeaponInstance } from "../utils/weapons";
 import { GAME_CONSTANTS } from "../constants/game";
 import { useTankCollision } from "../hooks/useTankCollision";
 import { usePooledProjectiles } from "../hooks/usePooledProjectiles";
+import { fx, FX_COLORS } from "./fx/fxSystem";
 
 interface TankProps {
   position: [number, number, number];
@@ -48,6 +49,7 @@ const Tank = ({ position = [0, 0, 0], isFirstPerson = false }: TankProps) => {
   const turretRotationRef = useRef(0);
   const trackSpinRef = useRef(0);
   const muzzleFlashRef = useRef(0);
+  const dustTimerRef = useRef(0);
   const positionRef = useRef<[number, number, number]>([...position]);
   const isInitializedRef = useRef(false);
   const _quat = useRef(new Quaternion()).current;
@@ -206,6 +208,23 @@ const Tank = ({ position = [0, 0, 0], isFirstPerson = false }: TankProps) => {
       tankRef.current.position.z = potentialZ;
       moved = true;
       trackSpinRef.current += intendedMovementMagnitude * moveSpeed * delta * 2.4;
+
+      // Kick up dust behind both tracks
+      dustTimerRef.current -= delta;
+      if (dustTimerRef.current <= 0) {
+        dustTimerRef.current = 0.07;
+        const yaw = tankRotationRef.current;
+        const fwdX = Math.sin(yaw);
+        const fwdZ = Math.cos(yaw);
+        const back = intendedMovementMagnitude > 0 ? -1.15 : 1.15;
+        for (const side of [-0.88, 0.88]) {
+          fx.dust(
+            tankRef.current.position.x + fwdX * back + fwdZ * side,
+            tankRef.current.position.z + fwdZ * back - fwdX * side,
+            0.6 + Math.min(1, moveSpeed / 6) * 0.5
+          );
+        }
+      }
     } else {
       moved = false;
     }
@@ -283,6 +302,15 @@ const Tank = ({ position = [0, 0, 0], isFirstPerson = false }: TankProps) => {
         playerTurretDamage
       );
       muzzleFlashRef.current = 1;
+      const aim = tankRotationRef.current + turretRotationRef.current;
+      fx.muzzle(
+        shootPosition[0],
+        shootPosition[1],
+        shootPosition[2],
+        Math.sin(aim),
+        Math.cos(aim),
+        FX_COLORS.playerShot
+      );
       recordShot(currentTime);
 
       sound.setVolume("playerCannon", 0.22);

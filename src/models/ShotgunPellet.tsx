@@ -1,10 +1,11 @@
 // src/components/ShotgunPellet.tsx
 import { useRef } from "react";
 import { useFrame, RootState } from "@react-three/fiber";
-import { Sphere } from "@react-three/drei";
-import { Mesh, Vector3 } from "three";
+import { Group, Vector3 } from "three";
 import { useGameState } from "../utils/gameState";
 import { debug } from "../utils/debug";
+import { fx, FX_COLORS } from "./fx/fxSystem";
+import { getCoreGeometry, getCoreMaterial, getTrailGeometry, getTrailMaterial } from "./fx/tracers";
 
 interface ShotgunPelletProps {
   id: string;
@@ -27,7 +28,7 @@ const ShotgunPellet = ({
   ttl,
   onRemove,
 }: ShotgunPelletProps) => {
-  const pelletRef = useRef<Mesh>(null);
+  const pelletRef = useRef<Group>(null);
   const hasCollidedRef = useRef<boolean>(false);
   const initialPositionRef = useRef<Vector3>(new Vector3(...position));
   const startTimeRef = useRef<number>(performance.now());
@@ -102,6 +103,7 @@ const ShotgunPellet = ({
         currentPosition.distanceTo(obstaclePos);
 
       if (distanceToObstacle < obstacleRadius + 0.08) {
+        fx.ricochet(currentPosition.x, currentPosition.y, currentPosition.z, FX_COLORS.spark);
         debug.log(
           `Pellet ${id} removed: Hit terrain at ${obstaclePos.x}, ${obstaclePos.z}`
         );
@@ -125,6 +127,7 @@ const ShotgunPellet = ({
         debug.log(
           `Pellet ${id} hit enemy ${enemy.id} at ${enemyPos.x}, ${enemyPos.z}`
         );
+        fx.impact(currentPosition.x, currentPosition.y, currentPosition.z, FX_COLORS.spark, 0.6);
         damageEnemy(enemy.id, damage);
         hasCollidedRef.current = true;
         onRemove(id);
@@ -133,21 +136,11 @@ const ShotgunPellet = ({
     }
   });
 
-  const sphereArgs: [
-    radius?: number,
-    widthSegments?: number,
-    heightSegments?: number
-  ] = [0.08, 6, 6];
   return (
-    <Sphere ref={pelletRef} args={sphereArgs} position={position}>
-      <meshStandardMaterial
-        color="#FFD700"
-        emissive="#FFA500"
-        emissiveIntensity={1.5}
-        metalness={0.4}
-        roughness={0.6}
-      />
-    </Sphere>
+    <group ref={pelletRef} position={position} rotation={[0, rotation, 0]}>
+      <mesh geometry={getTrailGeometry(0.9, 0.2)} material={getTrailMaterial("#ffb83d")} renderOrder={4} />
+      <mesh geometry={getCoreGeometry()} material={getCoreMaterial("#fff0c0")} scale={0.05} />
+    </group>
   );
 };
 

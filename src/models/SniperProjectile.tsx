@@ -1,9 +1,12 @@
 import { useRef } from "react";
 import { useFrame } from "@react-three/fiber";
-import { Sphere } from "@react-three/drei";
-import { Mesh, Vector3 } from "three";
+import { Group, Vector3 } from "three";
 import { useGameState } from "../utils/gameState";
 import { debug } from "../utils/debug";
+import { fx } from "./fx/fxSystem";
+import { getCoreGeometry, getCoreMaterial, getTrailGeometry, getTrailMaterial } from "./fx/tracers";
+
+const SNIPER_SPARK = 0xff7a2a;
 
 interface SniperProjectileProps {
   id: string;
@@ -24,7 +27,7 @@ const SniperProjectile = ({
   onRemove,
   penetrationPower = 1, // Default to 1 (no penetration)
 }: SniperProjectileProps) => {
-  const projectileRef = useRef<Mesh>(null);
+  const projectileRef = useRef<Group>(null);
   const hasCollidedRef = useRef(false);
   const initialPositionRef = useRef<[number, number, number]>([...position]);
   const distanceTraveledRef = useRef(0);
@@ -120,6 +123,11 @@ const SniperProjectile = ({
     // Move projectile along calculated direction
     projectileRef.current.position.x += newDirection.x * delta * velocity;
     projectileRef.current.position.z += newDirection.z * delta * velocity;
+    // Point the tracer along its actual heading (homing bends it slightly)
+    projectileRef.current.rotation.y = Math.atan2(
+      Math.sin(rotation) * sniperBulletVelocity + newDirection.x * velocity,
+      Math.cos(rotation) * sniperBulletVelocity + newDirection.z * velocity
+    );
 
     // Calculate distance traveled
     const currentPosition = new Vector3(
@@ -157,6 +165,7 @@ const SniperProjectile = ({
       if (distanceToObstacle < collisionRadius) {
         // Terrain obstacles always stop bullets regardless of penetration power
         debug.log(`Sniper bullet hit terrain obstacle`);
+        fx.ricochet(projectilePos.x, projectilePos.y, projectilePos.z, SNIPER_SPARK);
         onRemove(id);
         return;
       }
@@ -187,6 +196,7 @@ const SniperProjectile = ({
         );
 
         // Apply damage to the enemy
+        fx.impact(projectilePos.x, projectilePos.y, projectilePos.z, SNIPER_SPARK, isCriticalHit ? 1.6 : 1.1);
         damageEnemy(enemy.id, finalDamage);
 
         // Check if enemy was destroyed
@@ -213,20 +223,12 @@ const SniperProjectile = ({
     }
   });
 
+  const color = penetrationPower > 1 ? "#ff6a1a" : "#2aa8ff";
   return (
-    <Sphere ref={projectileRef} args={[0.1, 8, 8]} position={position}>
-      <meshStandardMaterial
-        color={penetrationPower > 1 ? "#FF6000" : "#00A0FF"}
-        emissive={penetrationPower > 1 ? "#FF3000" : "#00A0FF"}
-        emissiveIntensity={3}
-      />
-      <pointLight
-        color={penetrationPower > 1 ? "#FF3000" : "#00A0FF"}
-        intensity={2}
-        distance={8}
-        decay={2}
-      />
-    </Sphere>
+    <group ref={projectileRef} position={position} rotation={[0, rotation, 0]}>
+      <mesh geometry={getTrailGeometry(3.2, 0.36)} material={getTrailMaterial(color)} renderOrder={4} />
+      <mesh geometry={getCoreGeometry()} material={getCoreMaterial("#fff3e0")} scale={0.07} />
+    </group>
   );
 };
 

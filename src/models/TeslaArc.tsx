@@ -2,9 +2,35 @@ import { useRef, useState, useEffect } from "react";
 import { useFrame } from "@react-three/fiber";
 import { Group, Vector3, AdditiveBlending, Color } from "three";
 import { Line } from "@react-three/drei";
+import type { Line2, LineSegments2 } from "three-stdlib";
 import { useGameState } from "../utils/gameState";
 import { debug } from "../utils/debug";
 import { useSound } from "../utils/sound";
+import { fx, FX_COLORS } from "./fx/fxSystem";
+
+type ArcLine = Line2 | LineSegments2;
+
+/** Re-roll a lightning path in place so the bolt crackles without React re-renders. */
+function rejitter(lines: Array<ArcLine | null>, base: Vector3[], amount: number): void {
+  if (base.length < 3) return;
+  const flat: number[] = [];
+  for (let i = 0; i < base.length; i++) {
+    const p = base[i];
+    const edge = i === 0 || i === base.length - 1 ? 0 : amount;
+    flat.push(
+      p.x + (Math.random() - 0.5) * edge,
+      p.y + (Math.random() - 0.5) * edge,
+      p.z + (Math.random() - 0.5) * edge
+    );
+  }
+  for (const line of lines) line?.geometry.setPositions(flat);
+}
+
+function setLineLook(line: ArcLine | null, opacity: number, width: number): void {
+  if (!line) return;
+  line.material.opacity = opacity;
+  line.material.linewidth = width;
+}
 
 interface TeslaArcProps {
   id: string;
@@ -57,7 +83,12 @@ const TeslaArc = ({
     Array<{ points: Vector3[]; color: Color; width: number }>
   >([]);
   const [forks, setForks] = useState<LightningFork[]>([]);
-  const [arcOpacity, setArcOpacity] = useState(1.0);
+  const primaryRef = useRef<ArcLine>(null);
+  const primaryGlowRef = useRef<ArcLine>(null);
+  const forkRefs = useRef<Array<ArcLine | null>>([]);
+  const chainRefs = useRef<Array<ArcLine | null>>([]);
+  const chainGlowRefs = useRef<Array<ArcLine | null>>([]);
+  const jitterTimerRef = useRef(0);
 
   const damageEnemy = useGameState((state) => state.damageEnemy);
   const isPaused = useGameState((state) => state.isPaused);
@@ -79,14 +110,14 @@ const TeslaArc = ({
     const segmentLength = length / segments;
     const mainDir = direction.clone().normalize();
     let perp1: Vector3;
-    let perp2: Vector3;
+
     if (Math.abs(mainDir.y) > 0.9) {
       perp1 = new Vector3(1, 0, 0);
     } else {
       perp1 = new Vector3(0, 1, 0);
     }
     perp1.crossVectors(mainDir, perp1).normalize();
-    perp2 = new Vector3().crossVectors(mainDir, perp1).normalize();
+    const perp2 = new Vector3().crossVectors(mainDir, perp1).normalize();
     for (let i = 1; i < segments; i++) {
       const segmentPos = start
         .clone()
@@ -204,6 +235,7 @@ const TeslaArc = ({
         width: arcWidth,
       });
       damageEnemy(nextTarget.id, availableDamage);
+      fx.zap(nextTargetPos.x, nextTargetPos.y, nextTargetPos.z, FX_COLORS.tesla, 1.1);
       debug.log(
         `Tesla Chain ${chainCount + 1}: Enemy ${
           nextTarget.id
@@ -245,6 +277,8 @@ const TeslaArc = ({
       targetEnemy.position[2]
     );
     primaryTargetPosRef.current = targetPos;
+    fx.zap(startPos.x, startPos.y, startPos.z, FX_COLORS.tesla, 0.9);
+    fx.zap(targetPos.x, targetPos.y, targetPos.z, FX_COLORS.tesla, 1.4);
     const lightningPoints = generateLightningPath(startPos, targetPos);
     setPrimaryArcPoints(lightningPoints);
     setForks(generateForks(lightningPoints));
@@ -264,19 +298,39 @@ const TeslaArc = ({
       processChainEffect();
     }
     const fadeoutStart = ARC_LIFETIME * 0.5;
+    let arcOpacity = 1.0;
     if (elapsedTime > fadeoutStart) {
       const remainingTime = ARC_LIFETIME - elapsedTime;
       const fadeDuration = ARC_LIFETIME - fadeoutStart;
       const newOpacity =
         fadeDuration > 0 ? Math.max(0, remainingTime / fadeDuration) : 0;
-      setArcOpacity(newOpacity * newOpacity);
-    } else {
-      setArcOpacity(1.0);
+      arcOpacity = newOpacity * newOpacity;
     }
     if (elapsedTime >= ARC_LIFETIME) {
       onRemove(id);
       return;
     }
+
+    // Crackle: re-roll bolt shapes a few times over the arc's life
+    jitterTimerRef.current -= delta;
+    if (jitterTimerRef.current <= 0) {
+      jitterTimerRef.current = 0.07;
+      rejitter([primaryRef.current, primaryGlowRef.current], primaryArcPoints, 0.35);
+      chainArcPoints.forEach((arc, i) => {
+        rejitter([chainRefs.current[i], chainGlowRefs.current[i]], arc.points, 0.35);
+      });
+    }
+
+    const flicker = 0.8 + Math.random() * 0.2;
+    setLineLook(primaryRef.current, arcOpacity * flicker, 2.8);
+    setLineLook(primaryGlowRef.current, arcOpacity * 0.28, 10);
+    forks.forEach((fork, i) =>
+      setLineLook(forkRefs.current[i], fork.opacity * arcOpacity, fork.width * arcOpacity)
+    );
+    chainArcPoints.forEach((arc, i) => {
+      setLineLook(chainRefs.current[i], arcOpacity * (1 - i * 0.1) * flicker, arc.width * arcOpacity);
+      setLineLook(chainGlowRefs.current[i], arcOpacity * 0.22, arc.width * 4);
+    });
   });
 
   const lineMaterialProps = {
@@ -288,33 +342,61 @@ const TeslaArc = ({
   return (
     <group ref={groupRef}>
       {primaryArcPoints.length > 1 && (
-        <Line
-          points={primaryArcPoints}
-          color={new Color(0xa0ffff)}
-          lineWidth={2.8}
-          opacity={arcOpacity}
-          {...lineMaterialProps}
-        />
+        <>
+          <Line
+            ref={primaryGlowRef}
+            points={primaryArcPoints}
+            color={new Color(0x3aa8ff)}
+            lineWidth={10}
+            opacity={0.28}
+            {...lineMaterialProps}
+          />
+          <Line
+            ref={primaryRef}
+            points={primaryArcPoints}
+            color={new Color(0xd8ffff)}
+            lineWidth={2.8}
+            opacity={1}
+            {...lineMaterialProps}
+          />
+        </>
       )}
       {forks.map((fork, index) => (
         <Line
           key={`fork-${id}-${index}`}
+          ref={(line) => {
+            forkRefs.current[index] = line;
+          }}
           points={fork.points}
           color={fork.color}
-          lineWidth={fork.width * arcOpacity}
-          opacity={fork.opacity * arcOpacity}
+          lineWidth={fork.width}
+          opacity={fork.opacity}
           {...lineMaterialProps}
         />
       ))}
       {chainArcPoints.map((arc, index) => (
-        <Line
-          key={`chain-${id}-${index}`}
-          points={arc.points}
-          color={arc.color}
-          lineWidth={arc.width * arcOpacity}
-          opacity={arcOpacity * (1 - index * 0.1)}
-          {...lineMaterialProps}
-        />
+        <group key={`chain-${id}-${index}`}>
+          <Line
+            ref={(line) => {
+              chainGlowRefs.current[index] = line;
+            }}
+            points={arc.points}
+            color={new Color(0x3aa8ff)}
+            lineWidth={arc.width * 4}
+            opacity={0.22}
+            {...lineMaterialProps}
+          />
+          <Line
+            ref={(line) => {
+              chainRefs.current[index] = line;
+            }}
+            points={arc.points}
+            color={arc.color}
+            lineWidth={arc.width}
+            opacity={1 - index * 0.1}
+            {...lineMaterialProps}
+          />
+        </group>
       ))}
     </group>
   );

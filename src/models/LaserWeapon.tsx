@@ -1,11 +1,13 @@
 // src/components/LaserWeapon.tsx
 import { useRef, useEffect, useState } from "react";
-import { Box } from "@react-three/drei";
 import { Group } from "three";
 import { debug } from "../utils/debug";
 import LaserBeam from "./LaserBeam";
 import { useWeaponTracking } from "../utils/weaponTracking";
 import { WeaponInstance } from "../utils/weapons";
+import { LaserModel } from "./weaponVisuals/WeaponModels";
+import { WEAPON_ACCENTS, hexToNumber } from "./weaponVisuals/weaponMaterials";
+import { fx } from "./fx/fxSystem";
 
 // --- UPDATED PROPS INTERFACE ---
 interface LaserWeaponProps {
@@ -34,8 +36,18 @@ const LaserWeapon = ({
     rotation,
     weaponRef: laserRef as React.RefObject<Group>,
     barrelLength: 1.5,
-    onFire: (_firePosition, targetId) => {
+    onFire: (firePosition, targetId) => {
       setIsBeamActive(true);
+      const yaw = laserRef.current?.rotation.y ?? rotation;
+      fx.muzzle(
+        firePosition[0],
+        firePosition[1],
+        firePosition[2],
+        Math.sin(yaw),
+        Math.cos(yaw),
+        hexToNumber(WEAPON_ACCENTS.laser),
+        0.8
+      );
       firingDurationRef.current = 0;
       debug.log(`Laser ${instanceId} started firing at enemy ${targetId}`);
     },
@@ -68,65 +80,7 @@ const LaserWeapon = ({
     <>
       {/* Laser weapon model */}
       <group ref={laserRef}>
-        <Box args={[0.1, 0.1, 1.2]} position={[0, 0, 0.6]} castShadow>
-          <meshStandardMaterial
-            color="#444444"
-            metalness={0.8}
-            roughness={0.2}
-          />
-        </Box>
-        <Box args={[0.14, 0.14, 0.4]} position={[0, 0, 0.2]} castShadow>
-          <meshStandardMaterial
-            color="#30FFFF"
-            emissive="#30FFFF"
-            emissiveIntensity={isBeamActive ? 1.5 : 0.5}
-          />
-        </Box>
-        <Box args={[0.08, 0.08, 0.7]} position={[0, 0, 1.1]} castShadow>
-          <meshStandardMaterial
-            color="#333333"
-            metalness={0.9}
-            roughness={0.1}
-          />
-        </Box>
-        <Box args={[0.1, 0.1, 0.05]} position={[0, 0, 1.5]} castShadow>
-          <meshStandardMaterial
-            color="#00FFFF"
-            emissive="#00FFFF"
-            emissiveIntensity={isBeamActive ? 3.0 : 0.8}
-          />
-        </Box>
-        <Box args={[0.03, 0.15, 0.7]} position={[0, 0.12, 0.7]} castShadow>
-          <meshStandardMaterial
-            color="#555555"
-            metalness={0.7}
-            roughness={0.3}
-          />
-        </Box>
-        <Box args={[0.15, 0.03, 0.7]} position={[0.12, 0, 0.7]} castShadow>
-          <meshStandardMaterial
-            color="#555555"
-            metalness={0.7}
-            roughness={0.3}
-          />
-        </Box>
-        <Box args={[0.15, 0.03, 0.7]} position={[-0.12, 0, 0.7]} castShadow>
-          <meshStandardMaterial
-            color="#555555"
-            metalness={0.7}
-            roughness={0.3}
-          />
-        </Box>
-        <Box args={[0.04, 0.04, 0.4]} position={[0.07, -0.07, 0.3]} castShadow>
-          <meshStandardMaterial color="#222222" />
-        </Box>
-        <Box args={[0.03, 0.03, 0.05]} position={[0, 0.08, 0.05]} castShadow>
-          <meshStandardMaterial
-            color={isBeamActive ? "#FF3333" : "#33FF33"}
-            emissive={isBeamActive ? "#FF0000" : "#00FF00"}
-            emissiveIntensity={1.0}
-          />
-        </Box>
+        <LaserModel active={isBeamActive} />
       </group>
 
       {/* Render laser beam when active */}
@@ -136,7 +90,7 @@ const LaserWeapon = ({
           targetId={targetEnemyRef.current}
           damage={laserDamage * DAMAGE_TICK_RATE}
           range={weaponRange}
-          color="#00FFFF"
+          color={WEAPON_ACCENTS.laser}
         />
       )}
     </>

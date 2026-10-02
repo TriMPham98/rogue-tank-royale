@@ -4,6 +4,10 @@ import type { GameState, EnemySlice, Enemy, PowerUp } from "./types";
 import { GAME_CONSTANTS } from "../constants/game";
 import SoundManager from "../utils/sound";
 import { enforceMapBoundaries } from "../utils/boundaries";
+import { getEnemyVisualPosition } from "../utils/enemyVisualPositions";
+import { fx } from "../models/fx/fxSystem";
+
+const EXPLOSION_SCALE = { tank: 1, turret: 1.15, bomber: 1.35 } as const;
 
 export const createEnemySlice: StateCreator<
   GameState,
@@ -55,6 +59,9 @@ export const createEnemySlice: StateCreator<
     const isDestroyed = newHealth <= 0;
 
     if (isDestroyed) {
+      // Mesh position is live; store position is throttled
+      const at = getEnemyVisualPosition(id) ?? enemy.position;
+      fx.explosion(at[0], at[1], at[2], EXPLOSION_SCALE[enemy.type] ?? 1);
       get().removeEnemy(id);
       get().increaseScore(enemy.type === "tank" ? 100 : 150);
       get().incrementEnemyDefeatCount();

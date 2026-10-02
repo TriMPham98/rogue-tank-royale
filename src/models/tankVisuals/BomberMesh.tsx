@@ -2,6 +2,7 @@ import { type Ref } from "react";
 import { Box, Cylinder, Sphere } from "@react-three/drei";
 import { MeshStandardMaterial } from "three";
 import { BOMBER_MATS as B } from "./tankMaterials";
+import GlowSprite from "../fx/GlowSprite";
 
 interface BomberMeshProps {
   flashMaterialRef: Ref<MeshStandardMaterial>;
@@ -35,7 +36,8 @@ const BomberMesh = ({ flashMaterialRef }: BomberMeshProps) => {
         rotation={[Math.PI / 2, 0, 0]}
         material={B.thruster}
       />
-      <pointLight position={[0, 0.22, -1.35]} color="#ff5500" intensity={1.2} distance={4} />
+      {/* Thruster glow (sprite instead of a point light: no shader recompiles per spawn) */}
+      <GlowSprite color="#ff6a1a" size={1.3} opacity={0.85} position={[0, 0.22, -1.42]} />
 
       <Box args={[0.18, 0.42, 0.95]} position={[baseR * 0.82, 0.28, 0.05]} rotation={[0, 0, Math.PI / 7]} material={B.body} castShadow />
       <Box args={[0.18, 0.42, 0.95]} position={[-baseR * 0.82, 0.28, 0.05]} rotation={[0, 0, -Math.PI / 7]} material={B.body} castShadow />
@@ -46,6 +48,8 @@ const BomberMesh = ({ flashMaterialRef }: BomberMeshProps) => {
       <Cylinder args={[0.1, 0.12, 0.22, 6]} position={[-0.45, 0.12, 0.85]} rotation={[1.1, 0, 0]} material={B.dark} />
       <Cylinder args={[0.07, 0.09, 0.1, 6]} position={[0.45, 0.02, 0.96]} rotation={[1.1, 0, 0]} material={B.thruster} />
       <Cylinder args={[0.07, 0.09, 0.1, 6]} position={[-0.45, 0.02, 0.96]} rotation={[1.1, 0, 0]} material={B.thruster} />
+      <GlowSprite color="#ff7a2a" size={0.5} opacity={0.6} position={[0.45, -0.02, 1.0]} />
+      <GlowSprite color="#ff7a2a" size={0.5} opacity={0.6} position={[-0.45, -0.02, 1.0]} />
 
       <Sphere args={[baseR * 1.1, 20, 20]} position={[0, baseH / 2, 0]} renderOrder={1}>
         <meshStandardMaterial

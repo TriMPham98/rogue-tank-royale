@@ -1,124 +1,138 @@
-import { useRef, useEffect } from "react";
+import { useRef } from "react";
 import { useFrame } from "@react-three/fiber";
-import { Box, Sphere } from "@react-three/drei";
-import { Vector3, MeshStandardMaterial, Group } from "three";
+import { Group, Mesh } from "three";
 import { PowerUp, useGameState } from "../utils/gameState";
+import { getPickupAssets } from "./pickups/pickupAssets";
+import GlowSprite from "./fx/GlowSprite";
+import { fx, FX_COLORS } from "./fx/fxSystem";
 
 interface PowerUpItemProps {
   powerUp: PowerUp;
 }
 
+// Power-up lives 15s, then blinks for its final 5s
+const LIFETIME = 20;
+const BLINK_WINDOW = 5;
+const HOVER_HEIGHT = 0.8;
+
+const Medkit = () => {
+  const { geometry: g, material: m } = getPickupAssets();
+  return (
+    <group rotation={[0.18, 0, 0.08]}>
+      <mesh geometry={g.medkitCase} material={m.medkitShell} castShadow />
+      <mesh geometry={g.medkitSeam} material={m.medkitTrim} position={[0, 0.07, 0]} />
+      <mesh geometry={g.crossLong} material={m.medkitCross} position={[0, 0.245, 0]} />
+      <mesh geometry={g.crossShort} material={m.medkitCross} position={[0, 0.245, 0]} />
+      {[1, -1].map((side) => (
+        <group key={side} position={[0, -0.03, side * 0.283]}>
+          <mesh geometry={g.crossSideV} material={m.medkitCross} />
+          <mesh geometry={g.crossSideH} material={m.medkitCross} />
+        </group>
+      ))}
+      <mesh geometry={g.handleBar} material={m.medkitTrim} position={[0, 0.33, 0]} />
+      <mesh geometry={g.handlePost} material={m.medkitTrim} position={[-0.135, 0.28, 0]} />
+      <mesh geometry={g.handlePost} material={m.medkitTrim} position={[0.135, 0.28, 0]} />
+      <mesh geometry={g.latch} material={m.medkitTrim} position={[-0.27, 0.07, 0.29]} />
+      <mesh geometry={g.latch} material={m.medkitTrim} position={[0.27, 0.07, 0.29]} />
+    </group>
+  );
+};
+
+const Coin = () => {
+  const { geometry: g, material: m } = getPickupAssets();
+  return (
+    <group scale={0.95}>
+      <mesh geometry={g.coinDisc} material={m.gold} castShadow />
+      <mesh geometry={g.coinRim} material={m.gold} />
+      <mesh geometry={g.coinFace} material={m.goldDeep} />
+      <mesh geometry={g.coinStar} material={m.gold} position={[0, 0, 0.05]} />
+      <mesh geometry={g.coinStar} material={m.gold} position={[0, 0, -0.05]} rotation={[0, Math.PI, 0]} />
+    </group>
+  );
+};
+
 const PowerUpItem = ({ powerUp }: PowerUpItemProps) => {
-  const powerUpRef = useRef<Group>(null);
-  const rotationRef = useRef(0);
-  const materialRef = useRef<MeshStandardMaterial>(null);
-  const lifeTimeRef = useRef(0);
-  const fadeStartTimeRef = useRef(0);
+  const floatRef = useRef<Group>(null);
+  const ringRef = useRef<Mesh>(null);
+  const lifeTimeRef = useRef(LIFETIME);
+  const spinRef = useRef(Math.random() * Math.PI * 2);
 
   // Get only the collectPowerUp function, use direct store access for position
   const collectPowerUp = useGameState((state) => state.collectPowerUp);
   const getState = useRef(useGameState.getState).current;
 
-  // Set up lifetime and fade effects
-  useEffect(() => {
-    // Power-up will live for 15 seconds before starting to fade
-    fadeStartTimeRef.current = 15;
-    // Total lifetime including fade (20 seconds)
-    lifeTimeRef.current = 20;
-  }, []);
+  const isCoin = powerUp.type === "coin";
+  const { geometry, material } = getPickupAssets();
 
   // Hover animation and collision detection with player tank
   useFrame((state, delta) => {
-    if (!powerUpRef.current) return;
+    if (!floatRef.current) return;
 
-    // Access player position directly from store
     const playerTankPosition = getState().playerTankPosition;
     if (!playerTankPosition) return;
 
-    // Update lifetime
     lifeTimeRef.current -= delta;
-
-    // Check if it's time to fade out the power-up
-    if (lifeTimeRef.current <= 5 && materialRef.current) {
-      const fadeProgress = Math.max(0, lifeTimeRef.current / 5);
-      materialRef.current.opacity = 0.7 * fadeProgress;
-
-      // Set emissiveIntensity based on fade progress
-      materialRef.current.emissiveIntensity = 0.5 * fadeProgress;
-    }
-
-    // Destroy power-up if lifetime reaches 0
     if (lifeTimeRef.current <= 0) {
       collectPowerUp(powerUp.id, false);
       return;
     }
 
-    // Animate rotation and hover effect using ref instead of state
-    rotationRef.current += delta * 2;
+    const t = state.clock.getElapsedTime();
 
-    // Hover effect - faster for drop items, base height ensures it stays above ground
-    const hoverHeight = Math.sin(state.clock.getElapsedTime() * 3) * 0.2;
-    powerUpRef.current.position.y = powerUp.position[1] + 0.8 + hoverHeight;
+    // Expiring pickups blink faster as they run out
+    let visible = true;
+    if (lifeTimeRef.current <= BLINK_WINDOW) {
+      const urgency = 1 - lifeTimeRef.current / BLINK_WINDOW;
+      visible = Math.sin(t * (8 + urgency * 22)) > -0.35;
+    }
+    floatRef.current.visible = visible;
 
-    // Apply rotation directly
-    powerUpRef.current.rotation.y = rotationRef.current;
+    spinRef.current += delta * (isCoin ? 2.6 : 1.2);
+    floatRef.current.rotation.y = spinRef.current;
+    floatRef.current.position.y = HOVER_HEIGHT + Math.sin(t * 3) * 0.15;
+
+    if (ringRef.current) {
+      ringRef.current.visible = visible;
+      const pulse = 1 + ((t * 0.9) % 1) * 0.25;
+      ringRef.current.scale.set(pulse, pulse, pulse);
+    }
 
     // Check for collision with player tank
-    const playerPos = new Vector3(...playerTankPosition);
-    const powerUpPos = new Vector3(...powerUp.position);
-
-    const distance = playerPos.distanceTo(powerUpPos);
+    const dx = playerTankPosition[0] - powerUp.position[0];
+    const dy = playerTankPosition[1] - powerUp.position[1];
+    const dz = playerTankPosition[2] - powerUp.position[2];
+    const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
     // If player is close enough, collect the power-up
     if (distance < 2) {
+      fx.pickup(
+        powerUp.position[0],
+        powerUp.position[1] + HOVER_HEIGHT,
+        powerUp.position[2],
+        isCoin ? FX_COLORS.coin : FX_COLORS.health
+      );
       collectPowerUp(powerUp.id, true);
     }
   });
 
-  const isCoin = powerUp.type === "coin";
-
   return (
-    <group ref={powerUpRef} position={powerUp.position}>
-      {isCoin ? (
-        <>
-          <Sphere args={[0.35, 16, 16]}>
-            <meshStandardMaterial
-              ref={materialRef}
-              color="#FFD54F"
-              transparent
-              opacity={0.9}
-              emissive="#FFC107"
-              emissiveIntensity={0.6}
-              metalness={0.6}
-              roughness={0.3}
-            />
-          </Sphere>
-          <pointLight color="#FFC107" intensity={1} distance={4} decay={2} />
-        </>
-      ) : (
-        <>
-          {/* Health power-up */}
-          <Sphere args={[0.6, 16, 16]}>
-            <meshStandardMaterial
-              ref={materialRef}
-              color="red"
-              transparent
-              opacity={0.7}
-              emissive="red"
-              emissiveIntensity={0.5}
-            />
-          </Sphere>
-          {/* Health pack cross symbol */}
-          <Box args={[0.3, 0.8, 0.3]} position={[0, 0, 0]}>
-            <meshStandardMaterial color="white" />
-          </Box>
-          <Box args={[0.8, 0.3, 0.3]} position={[0, 0, 0]}>
-            <meshStandardMaterial color="white" />
-          </Box>
-          {/* Power-up glow */}
-          <pointLight color="red" intensity={1} distance={5} decay={2} />
-        </>
-      )}
+    <group position={powerUp.position}>
+      <group ref={floatRef} position={[0, HOVER_HEIGHT, 0]}>
+        {isCoin ? <Coin /> : <Medkit />}
+        <GlowSprite
+          color={isCoin ? "#ffcf4a" : "#ff4040"}
+          size={isCoin ? 1.9 : 2.3}
+          opacity={0.42}
+        />
+      </group>
+      <mesh
+        ref={ringRef}
+        rotation={[-Math.PI / 2, 0, 0]}
+        position={[0, 0.04, 0]}
+        geometry={geometry.groundRing}
+        material={isCoin ? material.coinRing : material.healthRing}
+        renderOrder={2}
+      />
     </group>
   );
 };

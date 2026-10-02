@@ -1,9 +1,11 @@
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useMemo } from "react";
 import { useFrame } from "@react-three/fiber";
-import { Cylinder } from "@react-three/drei";
-import { Vector3, Mesh } from "three";
+import { Color, Group, Sprite, Vector3 } from "three";
 import { useGameState } from "../utils/gameState";
 import { debug } from "../utils/debug";
+import { fx } from "./fx/fxSystem";
+import GlowSprite from "./fx/GlowSprite";
+import { getBeamMaterials } from "./fx/tracers";
 
 interface LaserBeamProps {
   startPosition: [number, number, number];
@@ -22,8 +24,12 @@ const LaserBeam = ({
   range,
   color,
 }: LaserBeamProps) => {
-  const beamRef = useRef<Mesh>(null);
+  const beamRef = useRef<Group>(null);
+  const impactRef = useRef<Sprite>(null);
   const lastDamageTimeRef = useRef(0);
+  const sparkTimerRef = useRef(0);
+  const mats = useMemo(() => getBeamMaterials(color), [color]);
+  const colorHex = useMemo(() => parseInt(new Color(color).getHexString(), 16), [color]);
 
   const damageEnemy = useGameState((state) => state.damageEnemy);
   const isPaused = useGameState((state) => state.isPaused);
@@ -49,8 +55,9 @@ const LaserBeam = ({
     };
   }, [targetId]);
 
-  useFrame((state) => {
+  useFrame((state, delta) => {
     if (!beamRef.current) return;
+    if (impactRef.current) impactRef.current.visible = false;
 
     if (isPaused || isGameOver) {
       beamRef.current.visible = false;
@@ -129,12 +136,20 @@ const LaserBeam = ({
     beamRef.current.lookAt(endPointVec);
     beamRef.current.rotateX(Math.PI / 2);
 
-    const beamThickness = 0.05;
-    beamRef.current.scale.set(
-      beamThickness,
-      effectiveBeamLength,
-      beamThickness
-    );
+    // Unit-length beam stretched along its axis; thickness shimmers
+    const shimmer = 0.85 + Math.random() * 0.3;
+    beamRef.current.scale.set(shimmer, effectiveBeamLength, shimmer);
+
+    if (impactRef.current) {
+      impactRef.current.visible = true;
+      impactRef.current.position.copy(endPointVec);
+      impactRef.current.scale.setScalar(0.9 + Math.random() * 0.5);
+    }
+    sparkTimerRef.current -= delta;
+    if (sparkTimerRef.current <= 0) {
+      sparkTimerRef.current = 0.06;
+      fx.zap(endPointVec.x, endPointVec.y, endPointVec.z, colorHex, isBlocked ? 0.35 : 0.55);
+    }
 
     if (!isBlocked) {
       const currentTime = state.clock.getElapsedTime();
@@ -148,16 +163,20 @@ const LaserBeam = ({
   });
 
   return (
-    <Cylinder ref={beamRef} args={[1, 1, 1, 8]} visible={false}>
-      <meshStandardMaterial
-        color={color}
-        emissive={color}
-        emissiveIntensity={2.5}
-        transparent={true}
-        opacity={0.75}
-        depthWrite={false}
-      />
-    </Cylinder>
+    <>
+      <group ref={beamRef} visible={false}>
+        <mesh material={mats.haze} renderOrder={5}>
+          <cylinderGeometry args={[0.2, 0.2, 1, 10, 1, true]} />
+        </mesh>
+        <mesh material={mats.glow} renderOrder={5}>
+          <cylinderGeometry args={[0.085, 0.085, 1, 10, 1, true]} />
+        </mesh>
+        <mesh material={mats.core} renderOrder={6}>
+          <cylinderGeometry args={[0.028, 0.028, 1, 6, 1, true]} />
+        </mesh>
+      </group>
+      <GlowSprite ref={impactRef} color={color} size={1} opacity={0.9} />
+    </>
   );
 };
 

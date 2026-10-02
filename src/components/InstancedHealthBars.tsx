@@ -1,32 +1,34 @@
 /**
  * InstancedMesh-based health bar renderer
- * Renders all enemy health bars using just 2 draw calls (background + foreground)
+ * Renders all enemy health bars in 2 draw calls (frame + fill). Bars face the
+ * camera and the fill shifts green → amber → red as health drops.
  */
-import { useRef, useMemo } from "react";
+import { useRef, useMemo, useLayoutEffect } from "react";
 import { useFrame } from "@react-three/fiber";
 import {
   InstancedMesh,
-  BoxGeometry,
+  PlaneGeometry,
   MeshBasicMaterial,
   Object3D,
   Color,
+  Vector3,
 } from "three";
 import { useGameState } from "../utils/gameState";
 import { getEnemyVisualPosition } from "../utils/enemyVisualPositions";
 
-const BAR_WIDTH = 1;
-const BAR_HEIGHT = 0.1;
-const BAR_DEPTH = 0.1;
+const BAR_WIDTH = 1.1;
+const BAR_HEIGHT = 0.11;
+const FRAME_PAD = 0.05;
 
-const BG_COLOR = new Color("red");
-const FG_COLOR = new Color("lime");
+const HIGH = new Color("#5dff7a");
+const MID = new Color("#ffc23d");
+const LOW = new Color("#ff3b30");
 
 // Height offsets for different enemy types (must match EnemyTank mesh layout)
 const HEIGHT_OFFSETS: Record<string, number> = {
-  tank: 1.2,
-  turret: 1.5,
-  // bomberBaseHeight(0.3) + bomberCockpitSize(0.8)*0.5 + 0.2
-  bomber: 0.9,
+  tank: 1.35,
+  turret: 1.6,
+  bomber: 1.05,
 };
 
 interface InstancedHealthBarsProps {
@@ -37,25 +39,30 @@ const InstancedHealthBars = ({ maxEnemies = 25 }: InstancedHealthBarsProps) => {
   const bgMeshRef = useRef<InstancedMesh>(null);
   const fgMeshRef = useRef<InstancedMesh>(null);
   const tempObject = useMemo(() => new Object3D(), []);
+  const right = useMemo(() => new Vector3(), []);
+  const color = useMemo(() => new Color(), []);
   const maxHealthCache = useRef<Map<string, number>>(new Map());
   const getState = useRef(useGameState.getState).current;
 
-  // Create geometry and materials once
   const bgGeometry = useMemo(
-    () => new BoxGeometry(BAR_WIDTH, BAR_HEIGHT, BAR_DEPTH),
+    () => new PlaneGeometry(BAR_WIDTH + FRAME_PAD, BAR_HEIGHT + FRAME_PAD),
     []
   );
-  const fgGeometry = useMemo(
-    () => new BoxGeometry(1, BAR_HEIGHT, BAR_DEPTH),
-    []
-  );
+  // Fill grows from its left edge so scaling never needs a recentring offset
+  const fgGeometry = useMemo(() => {
+    const g = new PlaneGeometry(BAR_WIDTH, BAR_HEIGHT);
+    g.translate(BAR_WIDTH / 2, 0, 0);
+    return g;
+  }, []);
 
   const bgMaterial = useMemo(
     () =>
       new MeshBasicMaterial({
-        color: BG_COLOR,
+        color: "#0b0f0a",
         transparent: true,
+        opacity: 0.72,
         depthTest: false,
+        toneMapped: false,
       }),
     []
   );
@@ -63,20 +70,33 @@ const InstancedHealthBars = ({ maxEnemies = 25 }: InstancedHealthBarsProps) => {
   const fgMaterial = useMemo(
     () =>
       new MeshBasicMaterial({
-        color: FG_COLOR,
+        color: "#ffffff",
         transparent: true,
         depthTest: false,
+        toneMapped: false,
       }),
     []
   );
 
+  // Allocate instance colours up front so the fill material never has to
+  // switch shader programs when the first enemy appears
+  useLayoutEffect(() => {
+    const fg = fgMeshRef.current;
+    if (fg && !fg.instanceColor) fg.setColorAt(0, HIGH);
+    if (fg) fg.count = 0;
+    if (bgMeshRef.current) bgMeshRef.current.count = 0;
+  }, []);
+
   // Update health bars every frame from live store (avoids React re-renders on moves)
-  useFrame(() => {
-    if (!bgMeshRef.current || !fgMeshRef.current) return;
+  useFrame(({ camera }) => {
+    const bg = bgMeshRef.current;
+    const fg = fgMeshRef.current;
+    if (!bg || !fg) return;
 
     const enemies = getState().enemies;
     const cache = maxHealthCache.current;
     const currentIds = new Set<string>();
+    right.set(1, 0, 0).applyQuaternion(camera.quaternion);
 
     let index = 0;
     for (const enemy of enemies) {
@@ -91,26 +111,28 @@ const InstancedHealthBars = ({ maxEnemies = 25 }: InstancedHealthBarsProps) => {
       const healthPercent = Math.max(0, Math.min(1, enemy.health / maxHealth));
       const heightOffset = HEIGHT_OFFSETS[enemy.type] || 1.2;
       const visual = getEnemyVisualPosition(enemy.id) ?? enemy.position;
+      const x = visual[0];
+      const y = visual[1] + heightOffset;
+      const z = visual[2];
 
-      // Background bar (full width)
-      tempObject.position.set(
-        visual[0],
-        visual[1] + heightOffset,
-        visual[2]
-      );
+      tempObject.quaternion.copy(camera.quaternion);
+      tempObject.position.set(x, y, z);
       tempObject.scale.set(1, 1, 1);
       tempObject.updateMatrix();
-      bgMeshRef.current.setMatrixAt(index, tempObject.matrix);
+      bg.setMatrixAt(index, tempObject.matrix);
 
-      // Foreground bar (scaled by health percent)
       tempObject.position.set(
-        visual[0] - (1 - healthPercent) * BAR_WIDTH * 0.5,
-        visual[1] + heightOffset,
-        visual[2] + 0.001
+        x - right.x * BAR_WIDTH * 0.5,
+        y - right.y * BAR_WIDTH * 0.5,
+        z - right.z * BAR_WIDTH * 0.5
       );
-      tempObject.scale.set(healthPercent, 1, 1);
+      tempObject.scale.set(Math.max(0.001, healthPercent), 1, 1);
       tempObject.updateMatrix();
-      fgMeshRef.current.setMatrixAt(index, tempObject.matrix);
+      fg.setMatrixAt(index, tempObject.matrix);
+
+      if (healthPercent > 0.5) color.copy(MID).lerp(HIGH, (healthPercent - 0.5) * 2);
+      else color.copy(LOW).lerp(MID, healthPercent * 2);
+      fg.setColorAt(index, color);
 
       index++;
     }
@@ -122,17 +144,11 @@ const InstancedHealthBars = ({ maxEnemies = 25 }: InstancedHealthBarsProps) => {
       }
     }
 
-    // Hide unused instances
-    for (let i = index; i < maxEnemies; i++) {
-      tempObject.position.set(0, -1000, 0);
-      tempObject.scale.set(0, 0, 0);
-      tempObject.updateMatrix();
-      bgMeshRef.current.setMatrixAt(i, tempObject.matrix);
-      fgMeshRef.current.setMatrixAt(i, tempObject.matrix);
-    }
-
-    bgMeshRef.current.instanceMatrix.needsUpdate = true;
-    fgMeshRef.current.instanceMatrix.needsUpdate = true;
+    bg.count = index;
+    fg.count = index;
+    bg.instanceMatrix.needsUpdate = true;
+    fg.instanceMatrix.needsUpdate = true;
+    if (fg.instanceColor) fg.instanceColor.needsUpdate = true;
   });
 
   return (
@@ -141,13 +157,13 @@ const InstancedHealthBars = ({ maxEnemies = 25 }: InstancedHealthBarsProps) => {
         ref={bgMeshRef}
         args={[bgGeometry, bgMaterial, maxEnemies]}
         frustumCulled={false}
-        renderOrder={1}
+        renderOrder={10}
       />
       <instancedMesh
         ref={fgMeshRef}
         args={[fgGeometry, fgMaterial, maxEnemies]}
         frustumCulled={false}
-        renderOrder={2}
+        renderOrder={11}
       />
     </>
   );

@@ -1,8 +1,9 @@
-import { useRef, useEffect, useState, useMemo } from "react";
+import { useRef, useEffect, useMemo } from "react";
 import { useFrame } from "@react-three/fiber";
 import { useGameState } from "../utils/gameState";
 import * as THREE from "three";
 import { useSound } from "../utils/sound";
+import { WALL_HEIGHT, createGroundMaterial, createWallMaterial } from "./safeZone/zoneShaders";
 
 const SafeZone = () => {
   const {
@@ -20,22 +21,11 @@ const SafeZone = () => {
   } = useGameState();
 
   const { playLoop, stopLoop } = useSound();
-  const [previewOpacity, setPreviewOpacity] = useState(0);
   const isSoundPlaying = useRef(false);
 
-  const cylinderRef = useRef<THREE.Mesh>(null);
-  const topRingRef = useRef<THREE.Mesh>(null);
-  const bottomRingRef = useRef<THREE.Mesh>(null);
-  const targetCylinderRef = useRef<THREE.Mesh>(null);
-  const targetTopRingRef = useRef<THREE.Mesh>(null);
-  const targetBottomRingRef = useRef<THREE.Mesh>(null);
-  const nextZoneCylinderRef = useRef<THREE.Mesh>(null);
-  const nextZoneTopRingRef = useRef<THREE.Mesh>(null);
-  const nextZoneBottomRingRef = useRef<THREE.Mesh>(null);
-
-  const cylinderMaterialRef = useRef<THREE.ShaderMaterial>(null);
-  const targetCylinderMaterialRef = useRef<THREE.ShaderMaterial>(null);
-  const nextZoneCylinderMaterialRef = useRef<THREE.ShaderMaterial>(null);
+  const wallRef = useRef<THREE.Mesh>(null);
+  const targetWallRef = useRef<THREE.Mesh>(null);
+  const nextWallRef = useRef<THREE.Mesh>(null);
 
   const lastDamageTime = useRef(0);
   const currentRadiusRef = useRef(safeZoneRadius);
@@ -60,95 +50,30 @@ const SafeZone = () => {
     return Math.max(minRadius, maxRadius - nextZoneLevel * radiusDecrease);
   })();
 
-  const zoneShader = useMemo(() => {
-    return {
-      uniforms: {
-        time: { value: 0 },
-        color: { value: new THREE.Color() },
-        opacity: { value: 0.2 },
-        pulseActive: { value: 0.0 },
-      },
-      vertexShader: `
-        varying vec2 vUv;
-        varying vec3 vPosition;
-        void main() {
-          vUv = uv;
-          vPosition = position;
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        }
-      `,
-      fragmentShader: `
-        uniform float time;
-        uniform vec3 color;
-        uniform float opacity;
-        uniform float pulseActive;
-        varying vec2 vUv;
-        varying vec3 vPosition;
-        
-        void main() {
-          // Horizontal grid lines
-          float gridY = mod(vPosition.y * 0.5 + time * 0.8, 16.0);
-          float horizontalLines = step(0.98, (1.0 - abs(sin(gridY))));
-          
-          // Edge highlight
-          float edgeHighlight = smoothstep(0.95, 1.0, vUv.y) + smoothstep(0.95, 1.0, 1.0 - vUv.y);
-          
-          // Wave pattern
-          float waves = 0.5 + 0.5 * sin(vUv.y * 20.0 + time * 1.5);
-          
-          // Subtle hexagon pattern
-          float hexPattern = 0.5 + 0.5 * sin(vUv.y * 30.0 + vUv.x * 30.0 + time);
-          
-          // Pulse effect when active
-          float pulse = pulseActive * 0.3 * (0.5 + 0.5 * sin(time * 3.0));
-          
-          // Final color
-          vec3 finalColor = color * (1.0 + horizontalLines * 0.3 + edgeHighlight * 0.2 + hexPattern * 0.1);
-          float finalOpacity = opacity * (1.0 + horizontalLines * 0.2 + waves * 0.05 + pulse);
-          
-          gl_FragColor = vec4(finalColor, finalOpacity);
-        }
-      `,
-    };
-  }, []);
+  // Unit-radius geometry scaled per frame: no per-frame geometry rebuilds
+  const wallGeometry = useMemo(
+    () => new THREE.CylinderGeometry(1, 1, WALL_HEIGHT, 96, 1, true),
+    []
+  );
+  const groundGeometry = useMemo(() => new THREE.PlaneGeometry(320, 320), []);
+  const materials = useMemo(
+    () => ({
+      wall: createWallMaterial("#38c8ff", 0.5),
+      target: createWallMaterial("#ff4d4d", 0.22),
+      next: createWallMaterial("#ff9500", 0),
+      ground: createGroundMaterial(),
+    }),
+    []
+  );
 
-  const ringShader = useMemo(() => {
-    return {
-      uniforms: {
-        time: { value: 0 },
-        color: { value: new THREE.Color() },
-        opacity: { value: 0.6 },
-      },
-      vertexShader: `
-        varying vec2 vUv;
-        void main() {
-          vUv = uv;
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        }
-      `,
-      fragmentShader: `
-        uniform float time;
-        uniform vec3 color;
-        uniform float opacity;
-        varying vec2 vUv;
-        
-        void main() {
-          // Pulsing glow
-          float pulse = 0.15 * sin(time * 3.0);
-          
-          // Rotating patterns
-          float angle = atan(vUv.y - 0.5, vUv.x - 0.5);
-          float dist = length(vUv - vec2(0.5));
-          float pattern = 0.5 + 0.5 * sin(angle * 20.0 + time * 1.0);
-          
-          vec3 finalColor = color * (1.0 + pulse + pattern * 0.1);
-          float finalOpacity = opacity * (1.0 + pulse * 0.5 + pattern * 0.1);
-          
-          gl_FragColor = vec4(finalColor, finalOpacity);
-        }
-      `,
-    };
-  }, []);
+  useEffect(
+    () => () => {
+      wallGeometry.dispose();
+      groundGeometry.dispose();
+      Object.values(materials).forEach((m) => m.dispose());
+    },
+    [wallGeometry, groundGeometry, materials]
+  );
 
   useEffect(() => {
     if (level % 5 === 0 && level > 0 && prevLevelRef.current !== level) {
@@ -196,21 +121,6 @@ const SafeZone = () => {
     stopLoop,
   ]);
 
-  useEffect(() => {
-    if (!isPreZoneChangeLevel || !safeZoneActive) {
-      setPreviewOpacity(0);
-      return;
-    }
-
-    const interval = setInterval(() => {
-      setPreviewOpacity(0.1 + 0.4 * Math.abs(Math.sin(Date.now() / 800)));
-    }, 50);
-
-    return () => {
-      clearInterval(interval);
-    };
-  }, [isPreZoneChangeLevel, safeZoneActive]);
-
   useFrame((state, delta) => {
     if (isPaused || isGameOver || !safeZoneActive) return;
 
@@ -218,28 +128,24 @@ const SafeZone = () => {
     const currentTime = state.clock.getElapsedTime();
     animationTimeRef.current += delta;
 
-    if (cylinderMaterialRef.current) {
-      cylinderMaterialRef.current.uniforms.time.value =
-        animationTimeRef.current;
-      cylinderMaterialRef.current.uniforms.pulseActive.value =
-        shouldPulse || shouldUrgencyPulse ? 1.0 : 0.0;
-      cylinderMaterialRef.current.uniforms.opacity.value =
-        shouldPulse || shouldUrgencyPulse
-          ? getPulseOpacity()
-          : getSafeZoneOpacity();
-    }
+    // Next-tier preview breathes while the warning is active
+    const previewOpacity = isPreZoneChangeLevel
+      ? 0.1 + 0.4 * Math.abs(Math.sin(Date.now() / 800))
+      : 0;
+    const urgent = shouldPulse || shouldUrgencyPulse;
+    const t = animationTimeRef.current;
 
-    if (targetCylinderMaterialRef.current) {
-      targetCylinderMaterialRef.current.uniforms.time.value =
-        animationTimeRef.current;
-    }
-
-    if (nextZoneCylinderMaterialRef.current) {
-      nextZoneCylinderMaterialRef.current.uniforms.time.value =
-        animationTimeRef.current;
-      nextZoneCylinderMaterialRef.current.uniforms.opacity.value =
-        previewOpacity * 0.2;
-    }
+    materials.wall.uniforms.uTime.value = t;
+    materials.wall.uniforms.uPulse.value = urgent ? 1 : 0;
+    materials.wall.uniforms.uOpacity.value = urgent ? getPulseOpacity() : getSafeZoneOpacity();
+    materials.target.uniforms.uTime.value = t;
+    materials.target.uniforms.uPulse.value = isPreZoneChangeLevel ? 1 : 0;
+    materials.target.uniforms.uOpacity.value = isPreZoneChangeLevel ? 0.14 : 0.09;
+    materials.next.uniforms.uTime.value = t;
+    materials.next.uniforms.uOpacity.value = previewOpacity * 0.8;
+    materials.ground.uniforms.uTime.value = t;
+    materials.ground.uniforms.uNextAlpha.value = previewOpacity * 2;
+    materials.ground.uniforms.uDanger.value = isPreZoneChangeLevel ? 1 : 0;
 
     if (
       isZoneChangeLevel &&
@@ -294,111 +200,32 @@ const SafeZone = () => {
       }
     }
 
-    if (cylinderRef.current) {
-      if (Math.abs(cylinderRef.current.scale.x - 1) > 0.01) {
-        cylinderRef.current.scale.set(1, 1, 1);
-        cylinderRef.current.geometry.dispose();
-        cylinderRef.current.geometry = new THREE.CylinderGeometry(
-          currentRadiusRef.current,
-          currentRadiusRef.current,
-          40,
-          64,
-          1,
-          true
-        );
-      }
-    }
+    const radius = currentRadiusRef.current;
+    const target = currentState.safeZoneTargetRadius;
+    wallRef.current?.scale.set(radius, 1, radius);
+    materials.wall.uniforms.uRadius.value = radius;
+    materials.ground.uniforms.uRadius.value = radius;
 
-    if (topRingRef.current && bottomRingRef.current) {
-      topRingRef.current.geometry.dispose();
-      bottomRingRef.current.geometry.dispose();
-      const ringThickness = 0.5;
-      const newTopRingGeometry = new THREE.RingGeometry(
-        currentRadiusRef.current - ringThickness,
-        currentRadiusRef.current,
-        64
-      );
-      const newBottomRingGeometry = new THREE.RingGeometry(
-        currentRadiusRef.current - ringThickness,
-        currentRadiusRef.current,
-        64
-      );
-      topRingRef.current.geometry = newTopRingGeometry;
-      bottomRingRef.current.geometry = newBottomRingGeometry;
+    const showTarget = target < radius - 0.05;
+    if (targetWallRef.current) {
+      targetWallRef.current.visible = showTarget;
+      targetWallRef.current.scale.set(target, 1, target);
     }
+    materials.target.uniforms.uRadius.value = target;
+    materials.ground.uniforms.uTarget.value = showTarget ? target : 0;
 
-    if (
-      targetCylinderRef.current &&
-      targetTopRingRef.current &&
-      targetBottomRingRef.current &&
-      currentState.safeZoneTargetRadius < currentRadiusRef.current
-    ) {
-      targetCylinderRef.current.geometry.dispose();
-      targetCylinderRef.current.geometry = new THREE.CylinderGeometry(
-        currentState.safeZoneTargetRadius,
-        currentState.safeZoneTargetRadius,
-        40,
-        64,
-        1,
-        true
-      );
-      targetTopRingRef.current.geometry.dispose();
-      targetBottomRingRef.current.geometry.dispose();
-      const targetRingThickness = 0.3;
-      const newTargetTopRingGeometry = new THREE.RingGeometry(
-        currentState.safeZoneTargetRadius - targetRingThickness,
-        currentState.safeZoneTargetRadius,
-        64
-      );
-      const newTargetBottomRingGeometry = new THREE.RingGeometry(
-        currentState.safeZoneTargetRadius - targetRingThickness,
-        currentState.safeZoneTargetRadius,
-        64
-      );
-      targetTopRingRef.current.geometry = newTargetTopRingGeometry;
-      targetBottomRingRef.current.geometry = newTargetBottomRingGeometry;
+    if (nextWallRef.current) {
+      nextWallRef.current.visible = isPreZoneChangeLevel;
+      nextWallRef.current.scale.set(nextZoneTargetRadius, 1, nextZoneTargetRadius);
     }
-
-    if (
-      isPreZoneChangeLevel &&
-      nextZoneCylinderRef.current &&
-      nextZoneTopRingRef.current &&
-      nextZoneBottomRingRef.current
-    ) {
-      const nextRingThickness = 0.3;
-      nextZoneCylinderRef.current.geometry.dispose();
-      nextZoneCylinderRef.current.geometry = new THREE.CylinderGeometry(
-        nextZoneTargetRadius,
-        nextZoneTargetRadius,
-        40,
-        64,
-        1,
-        true
-      );
-      nextZoneTopRingRef.current.geometry.dispose();
-      nextZoneTopRingRef.current.geometry = new THREE.RingGeometry(
-        nextZoneTargetRadius - nextRingThickness,
-        nextZoneTargetRadius,
-        64
-      );
-      nextZoneBottomRingRef.current.geometry.dispose();
-      nextZoneBottomRingRef.current.geometry = new THREE.RingGeometry(
-        nextZoneTargetRadius - nextRingThickness,
-        nextZoneTargetRadius,
-        64
-      );
-    }
+    materials.next.uniforms.uRadius.value = nextZoneTargetRadius;
+    materials.ground.uniforms.uNext.value = isPreZoneChangeLevel ? nextZoneTargetRadius : 0;
   });
 
-  const safeZoneColor = "#33ccff";
-  const ringColor = "#66d9ff";
-  const targetZoneColor = "#ff4d4d";
-  const nextZoneColor = "#ff9500";
-
   const getSafeZoneOpacity = () => {
-    const baseOpacity = 0.01;
+    const baseOpacity = 0.45;
     const zoneIncrease = Math.min(0.35, currentZoneLevel * 0.05);
-    const urgencyBonus = isPreZoneChangeLevel ? 0.15 : 0;
+    const urgencyBonus = isPreZoneChangeLevel ? 0.2 : 0;
     return baseOpacity + zoneIncrease + urgencyBonus;
   };
 
@@ -410,254 +237,38 @@ const SafeZone = () => {
   };
 
   return safeZoneActive ? (
-    <group position={[safeZoneCenter[0], 20, safeZoneCenter[1]]}>
-      <mesh ref={cylinderRef} position={[0, 0, 0]}>
-        <cylinderGeometry
-          args={[safeZoneRadius, safeZoneRadius, 40, 64, 1, true]}
-        />
-        <shaderMaterial
-          ref={cylinderMaterialRef}
-          args={[
-            {
-              ...zoneShader,
-              transparent: true,
-              side: THREE.DoubleSide,
-              depthWrite: false,
-              depthTest: false,
-              blending: THREE.AdditiveBlending,
-              uniforms: {
-                ...zoneShader.uniforms,
-                color: { value: new THREE.Color(safeZoneColor) },
-                opacity: { value: getSafeZoneOpacity() },
-              },
-            },
-          ]}
-        />
-      </mesh>
-
+    <group position={[safeZoneCenter[0], 0, safeZoneCenter[1]]}>
       <mesh
-        ref={topRingRef}
-        position={[0, 20, 0]}
-        rotation={[-Math.PI / 2, 0, 0]}>
-        <ringGeometry args={[safeZoneRadius - 0.5, safeZoneRadius, 64]} />
-        <shaderMaterial
-          args={[
-            {
-              ...ringShader,
-              transparent: true,
-              side: THREE.DoubleSide,
-              depthWrite: false,
-              depthTest: false,
-              blending: THREE.AdditiveBlending,
-              uniforms: {
-                ...ringShader.uniforms,
-                color: { value: new THREE.Color(ringColor) },
-                opacity: { value: 0.6 },
-              },
-            },
-          ]}
-        />
-      </mesh>
-
+        rotation={[-Math.PI / 2, 0, 0]}
+        position={[0, 0.06, 0]}
+        geometry={groundGeometry}
+        material={materials.ground}
+        renderOrder={2}
+      />
       <mesh
-        ref={bottomRingRef}
-        position={[0, -20, 0]}
-        rotation={[-Math.PI / 2, 0, 0]}>
-        <ringGeometry args={[safeZoneRadius - 0.5, safeZoneRadius, 64]} />
-        <shaderMaterial
-          args={[
-            {
-              ...ringShader,
-              transparent: true,
-              side: THREE.DoubleSide,
-              depthWrite: false,
-              depthTest: false,
-              blending: THREE.AdditiveBlending,
-              uniforms: {
-                ...ringShader.uniforms,
-                color: { value: new THREE.Color(ringColor) },
-                opacity: { value: 0.6 },
-              },
-            },
-          ]}
-        />
-      </mesh>
-
-      {safeZoneTargetRadius < safeZoneRadius && (
-        <>
-          <mesh ref={targetCylinderRef} position={[0, 0, 0]}>
-            <cylinderGeometry
-              args={[
-                safeZoneTargetRadius,
-                safeZoneTargetRadius,
-                40,
-                64,
-                1,
-                true,
-              ]}
-            />
-            <shaderMaterial
-              ref={targetCylinderMaterialRef}
-              args={[
-                {
-                  ...zoneShader,
-                  transparent: true,
-                  side: THREE.DoubleSide,
-                  depthWrite: false,
-                  depthTest: false,
-                  blending: THREE.AdditiveBlending,
-                  uniforms: {
-                    ...zoneShader.uniforms,
-                    color: { value: new THREE.Color(targetZoneColor) },
-                    opacity: { value: isPreZoneChangeLevel ? 0.08 : 0.05 },
-                    pulseActive: { value: isPreZoneChangeLevel ? 1.0 : 0.0 },
-                  },
-                },
-              ]}
-            />
-          </mesh>
-
-          <mesh
-            ref={targetTopRingRef}
-            position={[0, 20, 0]}
-            rotation={[-Math.PI / 2, 0, 0]}>
-            <ringGeometry
-              args={[safeZoneTargetRadius - 0.3, safeZoneTargetRadius, 64]}
-            />
-            <shaderMaterial
-              args={[
-                {
-                  ...ringShader,
-                  transparent: true,
-                  side: THREE.DoubleSide,
-                  depthWrite: false,
-                  depthTest: false,
-                  blending: THREE.AdditiveBlending,
-                  uniforms: {
-                    ...ringShader.uniforms,
-                    color: { value: new THREE.Color(targetZoneColor) },
-                    opacity: { value: isPreZoneChangeLevel ? 0.7 : 0.5 },
-                  },
-                },
-              ]}
-            />
-          </mesh>
-
-          <mesh
-            ref={targetBottomRingRef}
-            position={[0, -20, 0]}
-            rotation={[-Math.PI / 2, 0, 0]}>
-            <ringGeometry
-              args={[safeZoneTargetRadius - 0.3, safeZoneTargetRadius, 64]}
-            />
-            <shaderMaterial
-              args={[
-                {
-                  ...ringShader,
-                  transparent: true,
-                  side: THREE.DoubleSide,
-                  depthWrite: false,
-                  depthTest: false,
-                  blending: THREE.AdditiveBlending,
-                  uniforms: {
-                    ...ringShader.uniforms,
-                    color: { value: new THREE.Color(targetZoneColor) },
-                    opacity: { value: isPreZoneChangeLevel ? 0.7 : 0.5 },
-                  },
-                },
-              ]}
-            />
-          </mesh>
-        </>
-      )}
-
-      {isPreZoneChangeLevel && (
-        <>
-          <mesh ref={nextZoneCylinderRef} position={[0, 0, 0]}>
-            <cylinderGeometry
-              args={[
-                nextZoneTargetRadius,
-                nextZoneTargetRadius,
-                40,
-                64,
-                1,
-                true,
-              ]}
-            />
-            <shaderMaterial
-              ref={nextZoneCylinderMaterialRef}
-              args={[
-                {
-                  ...zoneShader,
-                  transparent: true,
-                  side: THREE.DoubleSide,
-                  depthWrite: false,
-                  depthTest: false,
-                  blending: THREE.AdditiveBlending,
-                  uniforms: {
-                    ...zoneShader.uniforms,
-                    color: { value: new THREE.Color(nextZoneColor) },
-                    opacity: { value: previewOpacity * 0.2 },
-                    pulseActive: { value: 1.0 },
-                  },
-                },
-              ]}
-            />
-          </mesh>
-
-          <mesh
-            ref={nextZoneTopRingRef}
-            position={[0, 20, 0]}
-            rotation={[-Math.PI / 2, 0, 0]}>
-            <ringGeometry
-              args={[nextZoneTargetRadius - 0.4, nextZoneTargetRadius, 64]}
-            />
-            <shaderMaterial
-              args={[
-                {
-                  ...ringShader,
-                  transparent: true,
-                  side: THREE.DoubleSide,
-                  depthWrite: false,
-                  depthTest: false,
-                  blending: THREE.AdditiveBlending,
-                  uniforms: {
-                    ...ringShader.uniforms,
-                    color: { value: new THREE.Color(nextZoneColor) },
-                    opacity: { value: previewOpacity * 0.8 },
-                  },
-                },
-              ]}
-            />
-          </mesh>
-
-          <mesh
-            ref={nextZoneBottomRingRef}
-            position={[0, -20, 0]}
-            rotation={[-Math.PI / 2, 0, 0]}>
-            <ringGeometry
-              args={[nextZoneTargetRadius - 0.4, nextZoneTargetRadius, 64]}
-            />
-            <shaderMaterial
-              args={[
-                {
-                  ...ringShader,
-                  transparent: true,
-                  side: THREE.DoubleSide,
-                  depthWrite: false,
-                  depthTest: false,
-                  blending: THREE.AdditiveBlending,
-                  uniforms: {
-                    ...ringShader.uniforms,
-                    color: { value: new THREE.Color(nextZoneColor) },
-                    opacity: { value: previewOpacity * 0.8 },
-                  },
-                },
-              ]}
-            />
-          </mesh>
-        </>
-      )}
+        ref={wallRef}
+        position={[0, WALL_HEIGHT / 2, 0]}
+        scale={[safeZoneRadius, 1, safeZoneRadius]}
+        geometry={wallGeometry}
+        material={materials.wall}
+        renderOrder={6}
+      />
+      <mesh
+        ref={targetWallRef}
+        position={[0, WALL_HEIGHT / 2, 0]}
+        geometry={wallGeometry}
+        material={materials.target}
+        visible={false}
+        renderOrder={6}
+      />
+      <mesh
+        ref={nextWallRef}
+        position={[0, WALL_HEIGHT / 2, 0]}
+        geometry={wallGeometry}
+        material={materials.next}
+        visible={false}
+        renderOrder={6}
+      />
     </group>
   ) : null;
 };

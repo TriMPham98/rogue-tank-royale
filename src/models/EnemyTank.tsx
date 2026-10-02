@@ -8,6 +8,7 @@ import { debug } from "../utils/debug";
 import { GAME_CONSTANTS } from "../constants/game";
 import { useTankCollision } from "../hooks/useTankCollision";
 import { usePooledProjectiles } from "../hooks/usePooledProjectiles";
+import { fx, FX_COLORS } from "./fx/fxSystem";
 import {
   setEnemyVisualPosition,
   clearEnemyVisualPosition,
@@ -26,6 +27,7 @@ const EnemyTank = ({ enemy }: EnemyTankProps) => {
   const tankRotationRef = useRef(0);
   const turretRotationRef = useRef(0);
   const trackSpinRef = useRef(0);
+  const dustTimerRef = useRef(Math.random() * 0.2);
 
   const isBomber = enemy.type === "bomber";
   const tankRadius = isBomber ? GAME_CONSTANTS.BOMBER_RADIUS : GAME_CONSTANTS.TANK_RADIUS;
@@ -157,6 +159,15 @@ const EnemyTank = ({ enemy }: EnemyTankProps) => {
         if (playerLevel > 60) damage = 30;
 
         spawnProjectile(shootPosition, projectileRotation, damage, 12);
+        fx.muzzle(
+          shootPosition[0],
+          shootPosition[1],
+          shootPosition[2],
+          tempVectors.shootDirection.x,
+          tempVectors.shootDirection.z,
+          FX_COLORS.enemyShot,
+          isTank ? 0.9 : 1.1
+        );
         recordShot(currentTime);
         debug.log(`Enemy ${enemy.id} (${enemy.type}) fired at player`);
       }
@@ -266,6 +277,18 @@ const EnemyTank = ({ enemy }: EnemyTankProps) => {
           tankRef.current.position.z = potentialZ;
           trackSpinRef.current += moveSpeed * delta * 2.4;
 
+          if (isTank) {
+            dustTimerRef.current -= delta;
+            if (dustTimerRef.current <= 0) {
+              dustTimerRef.current = 0.14;
+              fx.dust(
+                potentialX - tempVectors.moveDirection.x * 1.1,
+                potentialZ - tempVectors.moveDirection.z * 1.1,
+                0.7
+              );
+            }
+          }
+
           if (isBomber) {
             tankRef.current.position.y =
               0.2 + Math.sin(state.clock.getElapsedTime() * 4) * 0.1;
@@ -326,11 +349,9 @@ const EnemyTank = ({ enemy }: EnemyTankProps) => {
           minOpacity + flashFactor * (maxOpacity - minOpacity);
         flashMaterialRef.current.emissiveIntensity =
           minIntensity + flashFactor * (maxIntensity - minIntensity);
-        flashMaterialRef.current.needsUpdate = true;
       } else {
         flashMaterialRef.current.opacity = 0.0;
         flashMaterialRef.current.emissiveIntensity = 0;
-        flashMaterialRef.current.needsUpdate = true;
       }
     }
   });
