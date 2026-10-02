@@ -69,6 +69,8 @@ export interface GameFlowSlice {
   isWireframeAssembled: boolean;
   isTerrainReady: boolean;
   isFirstPersonView: boolean;
+  /** Increments on every new run / return to menu; scene objects reset on change */
+  runId: number;
 
   // Level progression
   level: number;

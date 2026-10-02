@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { useGameState } from "./index";
-import { useProgression } from "./progression";
+import { useProgression, SALVAGE_RATE, RANK_BONUS_PER_LEVEL } from "./progression";
 import { isBossLevel } from "../utils/enemyHitbox";
 import { GAME_CONSTANTS } from "../constants/game";
 
@@ -58,6 +58,18 @@ describe("boss gating", () => {
   });
 });
 
+describe("run lifecycle", () => {
+  it("bumps runId on every restart and menu return so the scene resets the tank", () => {
+    const start = useGameState.getState().runId;
+    useGameState.setState({ playerTankPosition: [30, 0.5, -20] });
+    useGameState.getState().restartGame();
+    expect(useGameState.getState().runId).toBe(start + 1);
+    expect(useGameState.getState().playerTankPosition).toEqual([0, 0.5, 0]);
+    useGameState.getState().returnToMainMenu();
+    expect(useGameState.getState().runId).toBe(start + 2);
+  });
+});
+
 describe("run banking", () => {
   beforeEach(() => {
     localStorage.clear();
@@ -69,7 +81,7 @@ describe("run banking", () => {
     useGameState.setState({ coins: 200, level: 4, isGameStarted: true });
     useGameState.getState().takeDamage(10_000);
     const banked = useProgression.getState().bank;
-    expect(banked).toBe(200 + 3 * 10);
+    expect(banked).toBe(200 * SALVAGE_RATE + 3 * RANK_BONUS_PER_LEVEL);
 
     // Leaving to the menu afterwards must not double-bank
     useGameState.getState().returnToMainMenu();

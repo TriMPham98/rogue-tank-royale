@@ -1,12 +1,12 @@
 // Sound management utility for the game.
 //
-// Samples are decoded into Web Audio buffers and played through a mastering bus
-// (EQ -> glue compressor -> limiter, plus a short room reverb send). Every play
-// gets its own voice, so rapid shots layer instead of cutting each other off,
-// and per-sound profiles add pitch variation and synthesized low-end layers.
-// Event sounds that have no sample (red zone siren, bombs, boss stings, supply
-// chimes) are synthesized on the fly. Falls back to plain HTMLAudio when Web
-// Audio is unavailable.
+// Samples are decoded into Web Audio buffers. The original game samples get a
+// half-strength remaster (see HALF_REMASTER); the level-up snare is untouched.
+// Newer event sounds with no
+// sample (red zone siren, shells, boss stings, armory chimes) are synthesized
+// on the fly and run through a mastering bus (EQ -> glue compressor ->
+// limiter, plus a short room reverb send). Falls back to plain HTMLAudio when
+// Web Audio is unavailable.
 import { useRef } from "react";
 
 // Global volume settings
@@ -53,28 +53,56 @@ interface SoundProfile {
   reverb?: number;
   /** Simultaneous voices before the oldest is stolen */
   maxVoices?: number;
-  /** Synthesized layers mixed under the sample */
-  layers?: SynthLayer[];
+  /** Bypass the mastering bus and reverb: straight to the speakers */
+  dry?: boolean;
+  /** Share of the signal sent through the mastering bus (rest stays dry). Default 1 */
+  blend?: number;
+  /** Synthesized low-end layers mixed under the sample, with their gain */
+  layers?: { kind: SynthLayer; gain: number }[];
   /** Gain trim applied after the caller's volume */
   trim?: number;
 }
 
-// The level-up snare is deliberately left dry and untouched.
+// The level-up snare is deliberately left exactly as recorded: dry, one voice.
+const UNTOUCHED: SoundProfile = { dry: true, maxVoices: 1 };
+
+// The original samples get the remaster at half strength: half the signal
+// goes through the mastering bus and half stays dry, with half the pitch
+// variation, reverb and low-end layering of the full remaster, and a little
+// polyphony so rapid shots overlap instead of cutting off.
+const HALF_REMASTER = 0.5;
+const half = (
+  pitchVar: number,
+  reverb: number,
+  maxVoices: number,
+  layers: SynthLayer[] = []
+): SoundProfile => ({
+  blend: HALF_REMASTER,
+  pitchVar: pitchVar * HALF_REMASTER,
+  reverb: reverb * HALF_REMASTER,
+  maxVoices,
+  layers: layers.map((kind) => ({ kind, gain: 0.5 * HALF_REMASTER })),
+});
+
 const PROFILES: Record<string, SoundProfile> = {
-  playerCannon: { pitchVar: 0.05, reverb: 0.18, maxVoices: 4, layers: ["thump"] },
-  shotgun: { pitchVar: 0.06, reverb: 0.15, maxVoices: 3, layers: ["thump"] },
-  sniper: { pitchVar: 0.03, reverb: 0.3, maxVoices: 3, layers: ["crack"] },
-  rocket: { pitchVar: 0.05, reverb: 0.2, maxVoices: 3 },
-  laser: { pitchVar: 0.04, reverb: 0.12, maxVoices: 4 },
-  npcImpact: { pitchVar: 0.08, reverb: 0.3, maxVoices: 6, layers: ["boom"] },
-  teslaZap: { pitchVar: 0.07, reverb: 0.15, maxVoices: 4 },
-  healthPickUp: { reverb: 0.15, maxVoices: 2 },
-  levelUp: { reverb: 0.08, maxVoices: 2 },
-  deployTank: { reverb: 0.2, maxVoices: 1, layers: ["boom"] },
-  zoneWarning: { reverb: 0.1, maxVoices: 1 },
+  playerCannon: half(0.05, 0.18, 2, ["thump"]),
+  shotgun: half(0.06, 0.15, 2, ["thump"]),
+  sniper: half(0.03, 0.3, 2, ["crack"]),
+  rocket: half(0.05, 0.2, 2),
+  laser: half(0.04, 0.12, 2),
+  npcImpact: half(0.08, 0.3, 3, ["boom"]),
+  teslaZap: half(0.07, 0.15, 2),
+  healthPickUp: half(0, 0.15, 1),
+  deployTank: half(0, 0.2, 1, ["boom"]),
+  zoneWarning: half(0, 0.1, 1),
+  levelUp: UNTOUCHED,
+  // Newer event sounds go through the mastering bus
   redZoneSiren: { reverb: 0.75, maxVoices: 1 },
   bombWhistle: { reverb: 0.2, maxVoices: 3 },
   bombBlast: { reverb: 0.45, maxVoices: 6 },
+  bossAlarm: { reverb: 0.5, maxVoices: 1 },
+  bossEscort: { reverb: 0.7, maxVoices: 1 },
+  upgradePurchase: { reverb: 0.25, maxVoices: 2 },
 };
 
 type SynthFn = (ctx: AudioContext, out: AudioNode, t: number, gain: number) => number;
@@ -294,6 +322,72 @@ class SoundManager {
     return src;
   }
 
+  /** Brass-like swell: detuned saw stack + fifth, driven and opened by a lowpass sweep. */
+  private braaam(
+    ctx: AudioContext,
+    out: AudioNode,
+    t: number,
+    root: number,
+    dur: number,
+    peak: number
+  ): void {
+    const drive = ctx.createWaveShaper();
+    const curve = new Float32Array(1024);
+    for (let i = 0; i < curve.length; i++) {
+      const x = (i / (curve.length - 1)) * 2 - 1;
+      curve[i] = Math.tanh(x * 2.4);
+    }
+    drive.curve = curve;
+
+    const lp = ctx.createBiquadFilter();
+    lp.type = "lowpass";
+    lp.Q.value = 1.4;
+    lp.frequency.setValueAtTime(180, t);
+    lp.frequency.exponentialRampToValueAtTime(1500, t + 0.35);
+    lp.frequency.exponentialRampToValueAtTime(320, t + dur);
+
+    const env = ctx.createGain();
+    env.gain.setValueAtTime(0.0001, t);
+    env.gain.exponentialRampToValueAtTime(peak, t + 0.18);
+    env.gain.setValueAtTime(peak, t + dur * 0.55);
+    env.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    drive.connect(lp).connect(env).connect(out);
+
+    const partials: [number, number, number][] = [
+      [1, -6, 0.5],
+      [1, 6, 0.5],
+      [2, -4, 0.35],
+      [2, 5, 0.35],
+      [3, 2, 0.22], // fifth above the octave
+      [4, -3, 0.12],
+    ];
+    for (const [mult, detune, level] of partials) {
+      const osc = ctx.createOscillator();
+      osc.type = "sawtooth";
+      osc.frequency.value = root * mult;
+      osc.detune.value = detune;
+      const vg = ctx.createGain();
+      vg.gain.value = level;
+      osc.connect(vg).connect(drive);
+      osc.start(t);
+      osc.stop(t + dur + 0.05);
+    }
+  }
+
+  /** Two-tone klaxon through a horn band, for distant alarms. */
+  private klaxon(ctx: AudioContext, out: AudioNode, t: number, cycles: number, peak: number): void {
+    const band = ctx.createBiquadFilter();
+    band.type = "bandpass";
+    band.frequency.value = 900;
+    band.Q.value = 1.2;
+    band.connect(out);
+    for (let i = 0; i < cycles; i++) {
+      const s0 = t + i * 0.7;
+      this.tone(ctx, band, "sawtooth", s0, 440, 440, 0.3, peak, 0.02);
+      this.tone(ctx, band, "sawtooth", s0 + 0.33, 349, 349, 0.3, peak, 0.02);
+    }
+  }
+
   /** Play a decoded sample as a layer inside a synth voice. */
   private sample(
     ctx: AudioContext,
@@ -451,19 +545,30 @@ class SoundManager {
       return 2.0;
     });
 
-    // Klaxon for a boss entering the arena
+    // Boss imminent: cinematic brass "braaam" hits over a sub impact, with
+    // the base klaxon pushed far back into the reverb instead of up front
     this.synths.set("bossAlarm", (ctx, out, t, g) => {
-      const lp = ctx.createBiquadFilter();
-      lp.type = "lowpass";
-      lp.frequency.value = 2200;
-      lp.connect(out);
-      for (let i = 0; i < 3; i++) {
-        const s = t + i * 0.7;
-        this.tone(ctx, lp, "square", s, 220, 220, 0.3, 0.12 * g, 0.01);
-        this.tone(ctx, lp, "square", s + 0.32, 165, 165, 0.3, 0.12 * g, 0.01);
+      this.sample(ctx, out, t, "npcImpact", 0.45, 1.1 * g);
+      this.sample(ctx, out, t, "shellImpact", 0.6, 0.5 * g, 0.117);
+      this.tone(ctx, out, "sine", t, 48, 22, 2.2, 1.1 * g, 0.01);
+
+      this.braaam(ctx, out, t + 0.05, 55, 1.5, 0.5 * g);
+      this.braaam(ctx, out, t + 1.45, 51.9, 1.9, 0.55 * g); // down a semitone
+
+      // Taiko-style double hit between the horns
+      for (const at of [1.15, 1.32]) {
+        this.tone(ctx, out, "sine", t + at, 110, 45, 0.35, 0.7 * g, 0.003);
+        this.noiseBurst(ctx, out, t + at, 0.12, 0.25 * g, "lowpass", 900, 200, 0.002);
       }
-      this.tone(ctx, out, "sine", t, 55, 40, 2.0, 0.5 * g, 0.05);
-      return 2.2;
+
+      this.klaxon(ctx, out, t + 0.2, 3, 0.05 * g);
+      return 3.6;
+    });
+
+    // Short distant klaxon: boss radioing in its bomber escort
+    this.synths.set("bossEscort", (ctx, out, t, g) => {
+      this.klaxon(ctx, out, t, 2, 0.12 * g);
+      return 1.5;
     });
 
     // Boss destroyed: big boom into a major-chord brass-ish sting
@@ -477,21 +582,28 @@ class SoundManager {
       return 2.0;
     });
 
-    // Supply pickup: bright two-note chime
-    this.synths.set("supplyPickUp", (ctx, out, t, g) => {
-      this.tone(ctx, out, "triangle", t, 1318.5, 1318.5, 0.12, 0.22 * g, 0.002);
-      this.tone(ctx, out, "triangle", t + 0.07, 1975.5, 1975.5, 0.28, 0.2 * g, 0.002);
-      this.tone(ctx, out, "sine", t + 0.07, 3951, 3951, 0.18, 0.05 * g, 0.002);
-      return 0.4;
-    });
-
-    // Permanent upgrade purchased
+    // Armory upgrade installed: double latch clunk, a short servo run-up,
+    // then a warm two-note bell confirm (inharmonic partials, no bright arp)
     this.synths.set("upgradePurchase", (ctx, out, t, g) => {
-      [523.3, 659.3, 784.0, 1046.5].forEach((f, i) => {
-        this.tone(ctx, out, "triangle", t + i * 0.055, f, f, 0.25, 0.18 * g, 0.003);
-      });
-      this.noiseBurst(ctx, out, t, 0.05, 0.15 * g, "bandpass", 3000, 3000, 0.001);
-      return 0.5;
+      for (const at of [0, 0.085]) {
+        this.noiseBurst(ctx, out, t + at, 0.035, 0.32 * g, "bandpass", 1900, 1400, 0.001);
+        this.tone(ctx, out, "sine", t + at, 160, 70, 0.12, 0.55 * g, 0.002);
+      }
+
+      const servo = ctx.createBiquadFilter();
+      servo.type = "lowpass";
+      servo.frequency.value = 1100;
+      servo.connect(out);
+      this.tone(ctx, servo, "sawtooth", t + 0.03, 170, 480, 0.2, 0.06 * g, 0.02);
+
+      const bell = (at: number, f: number, peak: number) => {
+        this.tone(ctx, out, "sine", t + at, f, f, 0.85, peak * g, 0.004);
+        this.tone(ctx, out, "sine", t + at, f * 2.756, f * 2.756, 0.28, peak * 0.35 * g, 0.002);
+        this.tone(ctx, out, "sine", t + at, f * 0.5, f * 0.5, 0.6, peak * 0.4 * g, 0.006);
+      };
+      bell(0.2, 392.0, 0.22); // G4
+      bell(0.32, 587.3, 0.2); // D5
+      return 1.2;
     });
 
     // Denied / can't afford
@@ -554,8 +666,20 @@ class SoundManager {
       gain.connect(air);
       dry = air;
     }
-    dry.connect(this.busIn!);
-    if (profile.reverb) {
+    const blend = profile.dry ? 0 : profile.blend ?? 1;
+    if (blend >= 1) {
+      dry.connect(this.busIn!);
+    } else if (blend <= 0) {
+      dry.connect(ctx.destination);
+    } else {
+      const direct = ctx.createGain();
+      direct.gain.value = 1 - blend;
+      dry.connect(direct).connect(ctx.destination);
+      const wet = ctx.createGain();
+      wet.gain.value = blend;
+      dry.connect(wet).connect(this.busIn!);
+    }
+    if (profile.reverb && blend > 0) {
       const send = ctx.createGain();
       send.gain.value = profile.reverb;
       dry.connect(send).connect(this.reverbIn!);
@@ -579,7 +703,7 @@ class SoundManager {
     src.connect(gain);
     src.start(t);
     if (!loop && profile.layers) {
-      for (const kind of profile.layers) this.layer(kind, gain, t, 0.5);
+      for (const { kind, gain: g } of profile.layers) this.layer(kind, gain, t, g);
     }
     return {
       sources: [src],
@@ -648,7 +772,8 @@ class SoundManager {
     const falloff = 1 / (1 + (d / 14) ** 2);
     const cutoff = 18000 * Math.exp(-d / 12) + 450;
     const voice = this.startVoice(id, false, volume * Math.max(0.04, falloff), cutoff);
-    if (voice) this.trackVoice(id, voice, PROFILES[id]?.maxVoices ?? 4);
+    // Separate voice pool so a distant boss shot never cuts off the player's own
+    if (voice) this.trackVoice(`${id}@spatial`, voice, PROFILES[id]?.maxVoices ?? 4);
     this.lastPlayTime.set(id, now);
   }
 

@@ -134,13 +134,22 @@ const dropBossCache = (at: [number, number, number], level: number) => {
   spawnPowerUp({ position: [at[0], 0.5, at[2]], type: "health" });
 };
 
+/** Seconds between staggered spawns while filling a level-up wave */
+const WAVE_SPAWN_INTERVAL = 0.3;
+
 export const useRespawnManager = () => {
   const prevEnemyCountRef = useRef<number>(0);
   const prevEnemiesRef = useRef<string[]>([]);
   const enemiesSpawnedThisRoundRef = useRef<number>(0);
   const currentLevelRef = useRef<number>(1);
-  const isSpawningWaveRef = useRef<boolean>(false);
   const gameRestartedRef = useRef<boolean>(false);
+  // Unpaused seconds; all spawn timing runs on this clock
+  const activeTimeRef = useRef(0);
+  const lastSpawnAtRef = useRef(0);
+  const graceUntilRef = useRef(0);
+  const waveModeRef = useRef(false);
+  /** Active-time timestamps when queued replacements become due */
+  const respawnQueueRef = useRef<number[]>([]);
 
   // Helper function to spawn a single enemy
   const spawnEnemy = (maxEnemies: number): boolean => {
@@ -353,60 +362,6 @@ export const useRespawnManager = () => {
     return false; // Indicate spawn failed or wasn't needed
   };
 
-  // Function to spawn a wave of enemies
-  const spawnEnemyWave = (count: number) => {
-    if (isSpawningWaveRef.current) {
-      if (SPAWN_STATS_DEBUG)
-        console.log(`[SPAWN STATS] Wave spawn already in progress, skipping`);
-      return;
-    }
-    isSpawningWaveRef.current = true;
-    let spawned = 0;
-    let consecutiveFailures = 0;
-    const maxConsecutiveFailures = 10; // Prevent infinite retry loops
-
-    const spawnNext = () => {
-      const freshState = useGameState.getState();
-      const maxEnemies = getMaxEnemies(freshState.level);
-      if (spawned < count && freshState.enemies.length < maxEnemies) {
-        if (spawnEnemy(maxEnemies)) {
-          // Use the boolean return value
-          spawned++;
-          consecutiveFailures = 0; // Reset on success
-          if (spawned < count) {
-            setTimeout(spawnNext, 300); // Stagger spawns slightly
-          } else {
-            isSpawningWaveRef.current = false; // Wave finished
-            if (SPAWN_STATS_DEBUG)
-              console.log(`[SPAWN STATS] Wave spawn of ${count} finished.`);
-          }
-        } else {
-          consecutiveFailures++;
-          if (consecutiveFailures >= maxConsecutiveFailures) {
-            // Give up after too many failures to prevent infinite loop
-            debug.warn(
-              `Wave spawn giving up after ${consecutiveFailures} consecutive failures. Spawned ${spawned}/${count}.`
-            );
-            isSpawningWaveRef.current = false;
-            return;
-          }
-          // If spawn failed (e.g., couldn't find position), try again shortly
-          debug.warn("Spawn attempt failed during wave, retrying...");
-          setTimeout(spawnNext, 500); // Longer delay on failure retry
-        }
-      } else {
-        isSpawningWaveRef.current = false; // Wave finished (or conditions met)
-        if (SPAWN_STATS_DEBUG)
-          console.log(
-            `[SPAWN STATS] Wave spawn condition met (spawned: ${spawned}/${count}, max: ${maxEnemies}).`
-          );
-      }
-    };
-    if (SPAWN_STATS_DEBUG)
-      console.log(`[SPAWN STATS] Starting wave spawn of ${count} enemies`);
-    spawnNext();
-  };
-
   // Add specific effect to monitor game restarts
   useEffect(() => {
     const unsubscribeRestart = useGameState.subscribe((state) => {
@@ -419,6 +374,10 @@ export const useRespawnManager = () => {
         enemiesSpawnedThisRoundRef.current = 0;
         currentLevelRef.current = 1;
         gameRestartedRef.current = true;
+        respawnQueueRef.current = [];
+        waveModeRef.current = false;
+        // Let generateLevel place the opening enemies before topping up
+        graceUntilRef.current = activeTimeRef.current + 1.5;
       } else if (gameRestartedRef.current && state.isTerrainReady) {
         // Terrain is ready after restart, reset flag
         gameRestartedRef.current = false;
@@ -426,6 +385,56 @@ export const useRespawnManager = () => {
     });
 
     return unsubscribeRestart;
+  }, []);
+
+  // Spawn reconciler. Spawning used to be fire-and-forget setTimeouts that
+  // were silently dropped whenever the game was paused (every level-up opens
+  // the upgrade picker, which pauses). A wave gave up after ~5s of paused
+  // retries, and once the field was empty no deaths meant no new respawns,
+  // so enemies stopped appearing for the rest of the run. This ticks on
+  // unpaused time only and always tops the field back up to the level cap.
+  useEffect(() => {
+    const TICK = 0.25;
+    const interval = setInterval(() => {
+      const s = useGameState.getState();
+      if (
+        !s.isGameStarted ||
+        s.isGameOver ||
+        s.isPaused ||
+        s.showUpgradeUI ||
+        s.showWeaponSelection ||
+        !s.isTerrainReady ||
+        gameRestartedRef.current
+      ) {
+        return;
+      }
+
+      const now = (activeTimeRef.current += TICK);
+      if (now < graceUntilRef.current) return;
+
+      const maxEnemies = getMaxEnemies(s.level);
+      if (s.enemies.length >= maxEnemies) {
+        waveModeRef.current = false;
+        respawnQueueRef.current = [];
+        return;
+      }
+
+      const queue = respawnQueueRef.current;
+      const sinceLast = now - lastSpawnAtRef.current;
+      const due =
+        // Level-up wave: fill quickly, staggered
+        (waveModeRef.current && sinceLast >= WAVE_SPAWN_INTERVAL) ||
+        // A destroyed enemy's replacement is due
+        (queue.length > 0 && queue[0] <= now) ||
+        // Safety net: under the cap with nothing scheduled
+        (queue.length === 0 && sinceLast >= respawnDelayMs(s.level) / 1000);
+
+      if (due && spawnEnemy(maxEnemies)) {
+        lastSpawnAtRef.current = now;
+        if (queue.length > 0 && queue[0] <= now) queue.shift();
+      }
+    }, TICK * 1000);
+    return () => clearInterval(interval);
   }, []);
 
   // Listen for changes in the enemies array (existing effect remains unchanged)
@@ -472,11 +481,12 @@ export const useRespawnManager = () => {
         currentLevelRef.current = state.level;
 
         if (additionalEnemiesNeeded > 0) {
-          setTimeout(() => {
-            // Delay wave spawn slightly after level change
-            spawnEnemyWave(additionalEnemiesNeeded);
-          }, 500);
+          // The reconciler fills the wave once the upgrade picker closes
+          waveModeRef.current = true;
+          lastSpawnAtRef.current = activeTimeRef.current;
         }
+        prevEnemyCountRef.current = currentEnemies;
+        prevEnemiesRef.current = state.enemies.map((e) => e.id);
       } else {
         // Only check for respawn if level hasn't changed in this update
         const currentEnemyCount = state.enemies.length;
@@ -556,24 +566,13 @@ export const useRespawnManager = () => {
             );
           }
 
-          // Respawn logic: Only spawn if under max and not currently in a wave spawn
-          if (currentEnemyCount < maxEnemies && !isSpawningWaveRef.current) {
-            const respawnDelay = respawnDelayMs(state.level);
-            if (SPAWN_STATS_DEBUG)
-              console.log(
-                `[SPAWN STATS] Scheduling respawn in ${respawnDelay}ms`
-              );
-            setTimeout(() => {
-              // Pass the current maxEnemies for the level
-              spawnEnemy(maxEnemies);
-            }, respawnDelay);
-          } else {
-            if (SPAWN_STATS_DEBUG)
-              console.log(
-                `[SPAWN STATS] Respawn skipped (At Max: ${
-                  currentEnemyCount >= maxEnemies
-                }, Spawning Wave: ${isSpawningWaveRef.current})`
-              );
+          // Queue replacements; the reconciler spawns them on unpaused time
+          if (currentEnemyCount < maxEnemies) {
+            const dueAt =
+              activeTimeRef.current + respawnDelayMs(state.level) / 1000;
+            for (let i = 0; i < destroyedEnemyIds.length; i++) {
+              respawnQueueRef.current.push(dueAt);
+            }
           }
         }
 
@@ -584,7 +583,7 @@ export const useRespawnManager = () => {
     });
 
     return unsubscribe;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, []); // Empty dependency array ensures this runs only once on mount
 
   return null; // This hook doesn't render anything

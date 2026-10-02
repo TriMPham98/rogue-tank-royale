@@ -65,7 +65,7 @@ const PauseMenu: React.FC<PauseMenuProps> = ({
         </div>
 
         <p className="supply-bank-hint">
-          Unspent supply is banked for permanent Armory upgrades when the run ends.
+          Half of any unspent supply is salvaged for permanent Armory upgrades when the run ends.
         </p>
 
         <button className="ui-button main-menu-button" onClick={onMainMenu}>

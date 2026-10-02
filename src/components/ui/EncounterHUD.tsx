@@ -2,6 +2,7 @@
 import React from "react";
 import { shallow } from "zustand/shallow";
 import { useGameState } from "../../utils/gameState";
+import { BOSS_WEAPON_LABELS, bossHas, bossLoadout } from "../../utils/bossLoadout";
 
 const BOSS_NAMES = ["GOLIATH", "BEHEMOTH", "LEVIATHAN", "COLOSSUS", "TITAN"];
 
@@ -45,6 +46,9 @@ const BossBar: React.FC = () => {
   );
 
   const name = BOSS_NAMES[Math.max(0, Math.floor(level / 10) - 1) % BOSS_NAMES.length];
+  const arsenal = bossLoadout(level)
+    .map((w) => BOSS_WEAPON_LABELS[w])
+    .join(" · ");
 
   if (incoming) {
     return (
@@ -52,6 +56,7 @@ const BossBar: React.FC = () => {
         <div className="boss-banner-kicker">WARNING</div>
         <div className="boss-banner-title">HEAVY ASSAULT TANK INBOUND</div>
         <div className="boss-banner-sub">Destroy {name} to advance</div>
+        <div className="boss-banner-arsenal">ARMED: {arsenal}</div>
       </div>
     );
   }
@@ -60,13 +65,15 @@ const BossBar: React.FC = () => {
 
   const max = boss.maxHealth || boss.health;
   const pct = Math.max(0, Math.min(1, boss.health / max));
+  const enraged = pct < 0.4 && bossHas(level, "overdrive");
 
   return (
-    <div className={`boss-bar ${pct < 0.4 ? "enraged" : ""}`}>
+    <div className={`boss-bar ${enraged ? "enraged" : ""}`}>
       <div className="boss-bar-label">
         <span>{name}</span>
-        <span className="boss-bar-tag">{pct < 0.4 ? "ENRAGED" : "BOSS"}</span>
+        <span className="boss-bar-tag">{enraged ? "ENRAGED" : "BOSS"}</span>
       </div>
+      <div className="boss-bar-arsenal">{arsenal}</div>
       <div className="boss-bar-track">
         <div className="boss-bar-fill" style={{ width: `${pct * 100}%` }} />
       </div>

@@ -1,0 +1,372 @@
+/*
+ * Tactical HUD theme layer.
+ * Loaded after GameUI.css and scoped to `.game-ui.military-theme` so it wins
+ * over the base styles but still loses to the `.mobile` size tuning.
+ * Look: dark glass panels with chamfered corners and corner brackets,
+ * segmented bars, condensed display type with monospaced readouts.
+ */
+
+.game-ui.military-theme {
+  --hud-font: "Rajdhani", "Arial Narrow", sans-serif;
+  --hud-mono: "Share Tech Mono", "Courier New", monospace;
+  --hud-title: "Orbitron", "Rajdhani", sans-serif;
+  --hud-accent: #5fdc5f;
+  --hud-accent-dim: rgba(95, 220, 95, 0.35);
+  --hud-accent-faint: rgba(95, 220, 95, 0.12);
+  --hud-glass: linear-gradient(160deg, rgba(14, 22, 14, 0.82), rgba(6, 10, 6, 0.7));
+  --hud-chamfer: 10px;
+  font-family: var(--hud-font);
+}
+
+/* --- Shared panel treatment --- */
+.game-ui.military-theme .hud-element,
+.game-ui.military-theme .player-stats-panel,
+.game-ui.military-theme .enhancement-card,
+.game-ui.military-theme .overlay-content {
+  background:
+    /* corner brackets */
+    linear-gradient(var(--hud-accent), var(--hud-accent)) top left / 14px 2px no-repeat,
+    linear-gradient(var(--hud-accent), var(--hud-accent)) top left / 2px 14px no-repeat,
+    linear-gradient(var(--hud-accent), var(--hud-accent)) bottom right / 14px 2px no-repeat,
+    linear-gradient(var(--hud-accent), var(--hud-accent)) bottom right / 2px 14px no-repeat,
+    var(--hud-glass);
+  border: 1px solid var(--hud-accent-dim);
+  border-radius: 0;
+  clip-path: polygon(
+    var(--hud-chamfer) 0,
+    100% 0,
+    100% calc(100% - var(--hud-chamfer)),
+    calc(100% - var(--hud-chamfer)) 100%,
+    0 100%,
+    0 var(--hud-chamfer)
+  );
+  box-shadow: inset 0 0 24px rgba(95, 220, 95, 0.06);
+  backdrop-filter: blur(6px);
+}
+
+/* --- Top HUD --- */
+.game-ui.military-theme .top-hud {
+  gap: 12px;
+  font-family: var(--hud-font);
+}
+
+.game-ui.military-theme .hud-element {
+  padding: 8px 14px 10px;
+}
+
+.game-ui.military-theme .hud-label {
+  font-family: var(--hud-font);
+  font-weight: 700;
+  font-size: 0.85rem;
+  letter-spacing: 0.28em;
+  color: rgba(160, 208, 160, 0.85);
+  margin-bottom: 6px;
+}
+
+.game-ui.military-theme .score-value {
+  font-family: var(--hud-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 1.75rem;
+  letter-spacing: 0.04em;
+  text-shadow: 0 0 12px rgba(95, 220, 95, 0.55);
+  animation: hud-value-pop 0.35s ease-out;
+}
+
+.game-ui.military-theme .coin-balance-hud .score-value {
+  text-shadow: 0 0 12px rgba(255, 213, 74, 0.5);
+}
+
+@keyframes hud-value-pop {
+  0% {
+    transform: scale(1.18);
+    filter: brightness(1.8);
+  }
+  100% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+}
+
+.game-ui.military-theme .rank-indicator {
+  font-family: var(--hud-mono);
+}
+
+/* Segmented bars */
+.game-ui.military-theme .progress-bar-container {
+  height: 20px;
+  width: 88%;
+  background: rgba(4, 10, 4, 0.75);
+  border: 1px solid var(--hud-accent-dim);
+  border-radius: 0;
+  clip-path: polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%);
+}
+
+.game-ui.military-theme .progress-bar {
+  position: relative;
+  box-shadow: 0 0 14px currentColor, inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.25), rgba(0, 0, 0, 0.15));
+}
+
+.game-ui.military-theme .progress-bar-container::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    90deg,
+    transparent 0 9px,
+    rgba(0, 0, 0, 0.55) 9px 11px
+  );
+  pointer-events: none;
+}
+
+.game-ui.military-theme .progress-text {
+  z-index: 1;
+  font-family: var(--hud-mono);
+  font-size: 0.85rem;
+  font-weight: normal;
+  letter-spacing: 0.08em;
+}
+
+.game-ui.military-theme .hull-integrity.critical {
+  border-color: rgba(255, 70, 50, 0.8);
+  --hud-accent: #ff4a3a;
+  animation: hud-critical 0.8s ease-in-out infinite alternate;
+}
+
+.game-ui.military-theme .hull-integrity.critical .hud-label {
+  color: #ff8a7a;
+}
+
+@keyframes hud-critical {
+  from {
+    box-shadow: inset 0 0 18px rgba(255, 60, 40, 0.15);
+  }
+  to {
+    box-shadow: inset 0 0 28px rgba(255, 60, 40, 0.45);
+  }
+}
+
+/* --- Unit status panel --- */
+.game-ui.military-theme .player-stats-panel {
+  padding: 12px 14px;
+  width: 230px;
+}
+
+.game-ui.military-theme .player-stats-panel .panel-header {
+  font-family: var(--hud-font);
+  font-weight: 700;
+  letter-spacing: 0.3em;
+  font-size: 0.8rem;
+  color: var(--hud-accent);
+  border-bottom: 1px solid var(--hud-accent-dim);
+  padding-bottom: 6px;
+  margin-bottom: 8px;
+}
+
+.game-ui.military-theme .stat-line {
+  font-family: var(--hud-font);
+  font-weight: 600;
+  font-size: 0.92rem;
+  letter-spacing: 0.06em;
+  border-bottom: 1px dashed var(--hud-accent-faint);
+  padding-bottom: 2px;
+}
+
+.game-ui.military-theme .stat-line span:last-child {
+  font-family: var(--hud-mono);
+  font-weight: normal;
+}
+
+/* --- Overlays (pause, upgrades, game over) --- */
+.game-ui.military-theme .overlay {
+  background:
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.18) 0 1px, transparent 1px 3px),
+    radial-gradient(ellipse at center, rgba(10, 20, 10, 0.72), rgba(0, 0, 0, 0.92));
+  backdrop-filter: blur(4px);
+}
+
+.game-ui.military-theme .overlay-content {
+  --hud-chamfer: 18px;
+  animation: hud-panel-in 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+
+@keyframes hud-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.game-ui.military-theme .overlay-content h2 {
+  font-family: var(--hud-title);
+  font-weight: 800;
+  font-size: 1.5rem;
+  letter-spacing: 0.22em;
+  background: linear-gradient(90deg, transparent, rgba(95, 220, 95, 0.14), transparent);
+  border-bottom: 1px solid var(--hud-accent-dim);
+}
+
+.game-ui.military-theme .game-over-title {
+  color: #ff5a46;
+  text-shadow: 0 0 16px rgba(255, 70, 50, 0.7);
+  background: linear-gradient(90deg, transparent, rgba(255, 70, 50, 0.16), transparent);
+  border-bottom-color: rgba(255, 70, 50, 0.5);
+}
+
+.game-ui.military-theme .game-over-title:before,
+.game-ui.military-theme .game-over-title:after {
+  background-color: #ff5a46;
+  color: #ff5a46;
+}
+
+.game-ui.military-theme .game-over-content p,
+.game-ui.military-theme .run-report {
+  font-family: var(--hud-font);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+.game-ui.military-theme .run-report-row span:last-child {
+  font-family: var(--hud-mono);
+}
+
+/* Upgrade cards */
+.game-ui.military-theme .enhancement-options {
+  background: transparent;
+}
+
+.game-ui.military-theme .enhancement-card {
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.game-ui.military-theme .enhancement-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--hud-accent);
+  box-shadow: inset 0 0 30px rgba(95, 220, 95, 0.18), 0 0 18px rgba(95, 220, 95, 0.25);
+}
+
+.game-ui.military-theme .enhancement-keybind {
+  font-family: var(--hud-mono);
+  border-radius: 0;
+  background: var(--hud-accent);
+  color: #061006;
+  border: none;
+}
+
+.game-ui.military-theme .enhancement-name {
+  font-family: var(--hud-title);
+  font-size: 1.05rem;
+  letter-spacing: 0.12em;
+  border-bottom-color: var(--hud-accent-dim);
+}
+
+.game-ui.military-theme .enhancement-value {
+  font-family: var(--hud-mono);
+}
+
+.game-ui.military-theme .enhancement-desc {
+  font-family: var(--hud-font);
+  font-weight: 500;
+  font-size: 1rem;
+}
+
+/* Buttons */
+.game-ui.military-theme .ui-button {
+  font-family: var(--hud-font);
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  border-radius: 0;
+  clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
+}
+
+/* Controls hint */
+.game-ui.military-theme .controls-info {
+  font-family: var(--hud-font);
+  font-weight: 600;
+  letter-spacing: 0.14em;
+}
+
+/* Boss / red zone banners pick up the display type */
+.game-ui.military-theme .boss-banner-title,
+.game-ui.military-theme .red-zone-alert-title {
+  font-family: var(--hud-title);
+}
+
+.game-ui.military-theme .boss-bar-label,
+.game-ui.military-theme .boss-banner-kicker,
+.game-ui.military-theme .boss-banner-sub,
+.game-ui.military-theme .red-zone-alert-sub {
+  font-family: var(--hud-font);
+  font-weight: 700;
+}
+
+.game-ui.military-theme .boss-bar-track {
+  clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
+}
+
+/* --- Screen feedback layer --- */
+.game-ui.military-theme .screen-effects {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  /* First child of .game-ui, so every HUD element paints above it */
+  z-index: 0;
+}
+
+.game-ui.military-theme .screen-effects > div {
+  position: absolute;
+  inset: 0;
+}
+
+.game-ui.military-theme .fx-vignette {
+  background: radial-gradient(ellipse at center, transparent 62%, rgba(0, 0, 0, 0.45) 100%);
+}
+
+.game-ui.military-theme .fx-hit-flash {
+  background: radial-gradient(ellipse at center, transparent 45%, rgba(255, 30, 10, 0.75) 100%);
+  opacity: 0;
+  animation: fx-hit 0.45s ease-out;
+}
+
+@keyframes fx-hit {
+  0% {
+    opacity: var(--hit, 0.6);
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.game-ui.military-theme .fx-critical {
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(200, 0, 0, 0.5) 100%);
+  animation: fx-critical 1s ease-in-out infinite;
+}
+
+@keyframes fx-critical {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+
+.game-ui.military-theme .fx-redzone {
+  background: linear-gradient(180deg, rgba(255, 40, 20, 0.12), transparent 25%, transparent 75%, rgba(255, 40, 20, 0.12));
+  animation: fx-critical 0.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .game-ui.military-theme .score-value,
+  .game-ui.military-theme .overlay-content,
+  .game-ui.military-theme .fx-critical,
+  .game-ui.military-theme .fx-redzone,
+  .game-ui.military-theme .hull-integrity.critical {
+    animation: none;
+  }
+}

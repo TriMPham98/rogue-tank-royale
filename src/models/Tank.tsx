@@ -14,6 +14,8 @@ import TeslaCoil from "./TeslaCoil";
 import { WeaponInstance } from "../utils/weapons";
 import { GAME_CONSTANTS } from "../constants/game";
 import { useTankCollision } from "../hooks/useTankCollision";
+import { cameraShake } from "../systems/cameraShake";
+import { MUZZLE_Z } from "./tankVisuals/playerTankParts";
 import { checkVehicleCollision, resolveMove } from "../utils/vehicleCollision";
 import { usePooledProjectiles } from "../hooks/usePooledProjectiles";
 import { fx, FX_COLORS } from "./fx/fxSystem";
@@ -24,6 +26,14 @@ interface TankProps {
 }
 
 const SIDE_WEAPON_DISTANCE = GAME_CONSTANTS.SIDE_WEAPON_DISTANCE;
+
+/** Hull heading at the start of every run */
+const SPAWN_HEADING = Math.PI;
+
+// Cannon recoil hull rock (damped spring, radians)
+const RECOIL_ROCK_IMPULSE = 0.75;
+const RECOIL_ROCK_STIFFNESS = 140;
+const RECOIL_ROCK_DAMPING = 13;
 const SIDE_WEAPON_Y_OFFSET = GAME_CONSTANTS.SIDE_WEAPON_Y_OFFSET;
 const MAX_SIDE_WEAPONS = GAME_CONSTANTS.MAX_SIDE_WEAPONS;
 
@@ -46,10 +56,15 @@ const Tank = ({ position = [0, 0, 0], isFirstPerson = false }: TankProps) => {
   const turretRef = useRef<Group>(null);
   const [isBraking, setIsBraking] = useState(false);
 
-  const tankRotationRef = useRef(Math.PI);
+  const tankRotationRef = useRef(SPAWN_HEADING);
   const turretRotationRef = useRef(0);
   const trackSpinRef = useRef(0);
   const muzzleFlashRef = useRef(0);
+  const recoilRef = useRef(0);
+  const rockRef = useRef<Group>(null);
+  const rockAngleRef = useRef(0);
+  const rockVelRef = useRef(0);
+  const rockDirRef = useRef(0);
   const dustTimerRef = useRef(0);
   const positionRef = useRef<[number, number, number]>([...position]);
   const isInitializedRef = useRef(false);
@@ -136,6 +151,27 @@ const Tank = ({ position = [0, 0, 0], isFirstPerson = false }: TankProps) => {
       debug.log("Tank component cleanup - preserve position state");
     };
   }, [position, updatePlayerPosition]);
+
+  // New run: snap the hull back to the spawn pad. The mesh isn't remounted on
+  // re-deploy, so without this it stayed wherever the last run ended.
+  useEffect(
+    () =>
+      useGameState.subscribe((state, prev) => {
+        if (state.runId === prev.runId || !tankRef.current) return;
+        tankRotationRef.current = SPAWN_HEADING;
+        turretRotationRef.current = 0;
+        rockAngleRef.current = 0;
+        rockVelRef.current = 0;
+        recoilRef.current = 0;
+        tankRef.current.position.set(0, 0.5, 0);
+        tankRef.current.quaternion.setFromAxisAngle(upVector, SPAWN_HEADING);
+        if (turretRef.current) turretRef.current.rotation.y = 0;
+        positionRef.current = [0, 0.5, 0];
+        state.updatePlayerPosition([0, 0.5, 0]);
+        state.updatePlayerTurretRotation(0);
+      }),
+    [upVector]
+  );
 
   useEffect(() => {
     resetSoundTimer("playerCannon");
@@ -299,10 +335,10 @@ const Tank = ({ position = [0, 0, 0], isFirstPerson = false }: TankProps) => {
     if (canShoot(currentTime, playerFireRate)) {
       const shootPosition: [number, number, number] = [
         tankRef.current.position.x +
-          Math.sin(tankRotationRef.current + turretRotationRef.current) * 2.15,
+          Math.sin(tankRotationRef.current + turretRotationRef.current) * MUZZLE_Z,
         tankRef.current.position.y + 0.75,
         tankRef.current.position.z +
-          Math.cos(tankRotationRef.current + turretRotationRef.current) * 2.15,
+          Math.cos(tankRotationRef.current + turretRotationRef.current) * MUZZLE_Z,
       ];
       spawnProjectile(
         shootPosition,
@@ -310,6 +346,12 @@ const Tank = ({ position = [0, 0, 0], isFirstPerson = false }: TankProps) => {
         playerTurretDamage
       );
       muzzleFlashRef.current = 1;
+      // Recoil: barrel slide, hull rocks away from the shot, camera jolt
+      recoilRef.current = 1;
+      rockVelRef.current += RECOIL_ROCK_IMPULSE;
+      rockDirRef.current = turretRotationRef.current;
+      cameraShake.addKick(0.85);
+      cameraShake.addTrauma(0.22);
       const aim = tankRotationRef.current + turretRotationRef.current;
       fx.muzzle(
         shootPosition[0],
@@ -323,6 +365,20 @@ const Tank = ({ position = [0, 0, 0], isFirstPerson = false }: TankProps) => {
 
       sound.setVolume("playerCannon", 0.22);
       sound.play("playerCannon");
+    }
+
+    // Hull rock: damped spring back to level after each shot
+    if (rockRef.current) {
+      const dt = Math.min(delta, 0.05);
+      const accel =
+        -RECOIL_ROCK_STIFFNESS * rockAngleRef.current -
+        RECOIL_ROCK_DAMPING * rockVelRef.current;
+      rockVelRef.current += accel * dt;
+      rockAngleRef.current += rockVelRef.current * dt;
+      const a = rockAngleRef.current;
+      // Nose lifts when firing forward; the firing side lifts on broadside shots
+      rockRef.current.rotation.x = -a * Math.cos(rockDirRef.current);
+      rockRef.current.rotation.z = a * Math.sin(rockDirRef.current);
     }
 
     if (isShootingRequested) {
@@ -416,13 +472,16 @@ const Tank = ({ position = [0, 0, 0], isFirstPerson = false }: TankProps) => {
         ref={tankRef}
         position={position}
         rotation={[0, tankRotationRef.current, 0]}>
-        <PlayerTankMesh
-          turretRef={turretRef}
-          isFirstPerson={isFirstPerson}
-          isBraking={isBraking}
-          trackSpinRef={trackSpinRef}
-          muzzleFlashRef={muzzleFlashRef}
-        />
+        <group ref={rockRef}>
+          <PlayerTankMesh
+            turretRef={turretRef}
+            isFirstPerson={isFirstPerson}
+            isBraking={isBraking}
+            trackSpinRef={trackSpinRef}
+            muzzleFlashRef={muzzleFlashRef}
+            recoilRef={recoilRef}
+          />
+        </group>
       </group>
 
       {renderedSideWeapons}

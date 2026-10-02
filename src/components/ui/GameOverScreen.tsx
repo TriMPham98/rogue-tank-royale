@@ -1,7 +1,7 @@
 // Game Over Screen component
 import React from "react";
 import ArmoryPanel from "./ArmoryPanel";
-import { formatSupply, useProgression } from "../../state/progression";
+import { SALVAGE_RATE, formatSupply, useProgression } from "../../state/progression";
 
 interface GameOverScreenProps {
   score: number;
@@ -32,7 +32,10 @@ const GameOverScreen: React.FC<GameOverScreenProps> = ({
         {lastRun && (
           <div className="run-report">
             <div className="run-report-row">
-              <span>Unspent supply</span>
+              <span>
+                Salvaged ({formatSupply(lastRun.unspentRaw)} unspent ×{" "}
+                {Math.round(SALVAGE_RATE * 100)}%)
+              </span>
               <span>{formatSupply(lastRun.unspent)} SP</span>
             </div>
             <div className="run-report-row">

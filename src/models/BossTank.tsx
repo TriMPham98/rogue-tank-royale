@@ -19,6 +19,9 @@ import { useTankCollision } from "../hooks/useTankCollision";
 import { usePooledProjectiles } from "../hooks/usePooledProjectiles";
 import { fx, FX_COLORS } from "./fx/fxSystem";
 import { bombardment } from "../systems/bombardment";
+import { BOSS_WEAPON_UNLOCKS, bossHas, type BossWeapon } from "../utils/bossLoadout";
+import { enemyHealth, enemySpeed } from "../utils/difficulty";
+import { enforceMapBoundaries } from "../utils/boundaries";
 import { checkVehicleCollision, resolveMove } from "../utils/vehicleCollision";
 import SoundManager from "../utils/sound";
 import {
@@ -28,17 +31,18 @@ import {
 
 /** Visual scale relative to a regular enemy tank */
 const BOSS_SCALE = 2.1;
-const CANNON_RANGE = 30;
-const KEEP_DISTANCE = 11;
-const SPREAD = 0.14;
+const SHOTGUN_RANGE = 16;
+const SHOTGUN_SPREAD = [-0.32, -0.16, 0, 0.16, 0.32];
+const CANNON_RANGE = 32;
 
 interface BossTankProps {
   enemy: Enemy;
 }
 
 /**
- * Heavy assault tank for boss levels: slow, armoured, fires three-shell
- * spreads and calls mortar barrages onto the player. Enrages below 40% hull.
+ * Heavy assault tank for boss levels. Its weapons stack by boss tier
+ * (see bossLoadout.ts): shotgun, then mortar, heavy cannon, bomber escort,
+ * and finally an overdrive enrage below 40% hull.
  */
 const BossTank = ({ enemy }: BossTankProps) => {
   const initialPosition = useRef(new Vector3(...enemy.position)).current;
@@ -51,13 +55,26 @@ const BossTank = ({ enemy }: BossTankProps) => {
   const trackSpinRef = useRef(0);
   const dustTimerRef = useRef(0);
   const barrageTimerRef = useRef(5);
+  const escortTimerRef = useRef(8);
+  const shotgunAtRef = useRef(-Infinity);
+  const cannonAtRef = useRef(-Infinity);
+
+  // Loadout is fixed for the fight: the level can't change until this boss dies
+  const arms = useMemo(() => {
+    const level = useGameState.getState().level;
+    return Object.fromEntries(
+      (Object.keys(BOSS_WEAPON_UNLOCKS) as BossWeapon[]).map((w) => [w, bossHas(level, w)])
+    ) as Record<BossWeapon, boolean>;
+  }, []);
+  // With only a shotgun the boss has to close in; with a cannon it can hang back
+  const keepDistance = arms.cannon ? 11 : 6;
   const enragedRef = useRef(false);
 
   const { checkTerrainCollision } = useTankCollision({
     tankRadius: GAME_CONSTANTS.BOSS_RADIUS,
     enemyId: enemy.id,
   });
-  const { spawnProjectile, canShoot, recordShot } = usePooledProjectiles({
+  const { spawnProjectile } = usePooledProjectiles({
     isEnemy: true,
     defaultDamage: 8,
     defaultVelocity: 13,
@@ -118,7 +135,7 @@ const BossTank = ({ enemy }: BossTankProps) => {
     v.toPlayer.normalize();
 
     const healthFraction = self.health / (self.maxHealth || self.health);
-    if (!enragedRef.current && healthFraction < 0.4) {
+    if (arms.overdrive && !enragedRef.current && healthFraction < 0.4) {
       enragedRef.current = true;
       SoundManager.setVolume("bossAlarm", 0.45);
       SoundManager.play("bossAlarm");
@@ -133,33 +150,44 @@ const BossTank = ({ enemy }: BossTankProps) => {
     turretRotationRef.current += turretDiff * delta * (enraged ? 2.4 : 1.6);
     turretRef.current.rotation.y = turretRotationRef.current;
 
-    // --- Main cannon: three-shell spread ---
-    const fireInterval = enraged ? 1.5 : 2.4;
-    if (distance < CANNON_RANGE && canShoot(t, fireInterval)) {
+    const level = s.level;
+    const muzzleShot = (spread: number[], damage: number, velocity: number, flash: number) => {
       v.barrel.set(0, 0.2, 1.95);
-      turretRef.current.localToWorld(v.barrel);
-      turretRef.current.getWorldQuaternion(quat);
+      turretRef.current!.localToWorld(v.barrel);
+      turretRef.current!.getWorldQuaternion(quat);
       v.dir.set(0, 0, 1).applyQuaternion(quat);
       const heading = Math.atan2(v.dir.x, v.dir.z);
-
-      const level = s.level;
-      const damage = Math.round(8 + level * 0.35);
-      for (const offset of [-SPREAD, 0, SPREAD]) {
-        spawnProjectile([v.barrel.x, v.barrel.y, v.barrel.z], heading + offset, damage, 13);
+      for (const offset of spread) {
+        spawnProjectile([v.barrel.x, v.barrel.y, v.barrel.z], heading + offset, damage, velocity);
       }
-      fx.muzzle(v.barrel.x, v.barrel.y, v.barrel.z, v.dir.x, v.dir.z, FX_COLORS.enemyShot, 2.2);
-      const vol = Math.max(0.04, 0.3 * (1 - distance / 50));
-      SoundManager.setVolume("playerCannon", vol);
-      SoundManager.play("playerCannon");
-      recordShot(t);
+      fx.muzzle(v.barrel.x, v.barrel.y, v.barrel.z, v.dir.x, v.dir.z, FX_COLORS.enemyShot, flash);
+    };
+
+    // --- Shotgun (L10+): wide pellet fan at close range ---
+    if (arms.shotgun && distance < SHOTGUN_RANGE && t - shotgunAtRef.current >= (enraged ? 1.9 : 2.6)) {
+      shotgunAtRef.current = t;
+      muzzleShot(SHOTGUN_SPREAD, Math.round(4 + level * 0.2), 14, 2.4);
+      SoundManager.playSpatial("shotgun", 0.35, distance);
     }
 
-    // --- Mortar barrage onto the player's position ---
+    // --- Heavy cannon (L30+): single fast shell that reaches kiting players ---
+    if (
+      arms.cannon &&
+      distance >= SHOTGUN_RANGE * 0.6 &&
+      distance < CANNON_RANGE &&
+      t - cannonAtRef.current >= (enraged ? 2.2 : 3.2)
+    ) {
+      cannonAtRef.current = t;
+      muzzleShot([0], Math.round(12 + level * 0.4), 20, 2.0);
+      SoundManager.playSpatial("playerCannon", 0.4, distance);
+    }
+
+    // --- Mortar barrage (L20+) onto the player's position ---
     barrageTimerRef.current -= delta;
-    if (barrageTimerRef.current <= 0 && distance < 45) {
-      barrageTimerRef.current = enraged ? 6 : 9;
-      const shells = enraged ? 7 : 5;
-      const damage = GAME_CONSTANTS.RED_ZONE_BOMB_BASE_DAMAGE + s.level * 0.5;
+    if (arms.mortar && barrageTimerRef.current <= 0 && distance < 45) {
+      barrageTimerRef.current = enraged ? 7 : 10;
+      const shells = (bossHas(level, "escort") ? 5 : 4) + (enraged ? 2 : 0);
+      const damage = GAME_CONSTANTS.RED_ZONE_BOMB_BASE_DAMAGE + level * 0.5;
       for (let i = 0; i < shells; i++) {
         // First shell lands on the player; the rest bracket them
         const a = Math.random() * Math.PI * 2;
@@ -172,6 +200,23 @@ const BossTank = ({ enemy }: BossTankProps) => {
         });
       }
       fx.muzzle(pos.x, pos.y + 2.4, pos.z, 0, 0, FX_COLORS.fire, 1.6);
+    }
+
+    // --- Bomber escort (L40+): call in a pair of bombers from the flanks ---
+    escortTimerRef.current -= delta;
+    if (arms.escort && escortTimerRef.current <= 0) {
+      escortTimerRef.current = enraged ? 11 : 15;
+      for (const side of [-1, 1]) {
+        if (getState().enemies.length >= GAME_CONSTANTS.MAX_ENEMIES) break;
+        const a = tankRotationRef.current + side * (Math.PI / 2);
+        s.spawnEnemy({
+          type: "bomber",
+          position: enforceMapBoundaries([pos.x + Math.sin(a) * 5, 0.5, pos.z + Math.cos(a) * 5]),
+          health: enemyHealth("bomber", level),
+          speed: enemySpeed("bomber", level),
+        });
+      }
+      SoundManager.playSpatial("bossEscort", 0.5, distance);
     }
 
     // --- Movement: close to medium range, steer around rocks ---
@@ -190,7 +235,7 @@ const BossTank = ({ enemy }: BossTankProps) => {
     tankRotationRef.current += headingDiff * delta * 0.8;
     tankRef.current.rotation.y = tankRotationRef.current;
 
-    if (distance > KEEP_DISTANCE) {
+    if (distance > keepDistance) {
       const speed = (enemy.speed ?? GAME_CONSTANTS.BOSS_SPEED) * (enraged ? 1.35 : 1);
       const nx = pos.x + Math.sin(tankRotationRef.current) * delta * speed;
       const nz = pos.z + Math.cos(tankRotationRef.current) * delta * speed;
@@ -236,8 +281,10 @@ const BossTank = ({ enemy }: BossTankProps) => {
         {/* Extra armour skirts + rear mortar rack set it apart from regular tanks */}
         <Box args={[0.14, 0.34, 2.1]} position={[-0.92, 0.0, 0]} material={T.hullDark} castShadow />
         <Box args={[0.14, 0.34, 2.1]} position={[0.92, 0.0, 0]} material={T.hullDark} castShadow />
-        <Box args={[0.9, 0.18, 0.5]} position={[0, 0.36, -0.82]} material={T.metal} castShadow />
-        {[-0.28, 0, 0.28].map((x) => (
+        {arms.mortar && (
+          <Box args={[0.9, 0.18, 0.5]} position={[0, 0.36, -0.82]} material={T.metal} castShadow />
+        )}
+        {arms.mortar && [-0.28, 0, 0.28].map((x) => (
           <Cylinder
             key={`mortar-${x}`}
             args={[0.07, 0.08, 0.42, 8]}

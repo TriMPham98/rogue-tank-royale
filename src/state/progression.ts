@@ -23,13 +23,14 @@ export interface PermUpgradeDef {
 }
 
 export const PERM_UPGRADES: PermUpgradeDef[] = [
-  { id: "armor", name: "Composite Armor", perLevel: "+10 max hull", maxLevel: 10, baseCost: 150, costGrowth: 1.35 },
-  { id: "gunnery", name: "Gunnery Training", perLevel: "+6% cannon damage", maxLevel: 10, baseCost: 200, costGrowth: 1.4 },
-  { id: "autoloader", name: "Autoloader", perLevel: "+5% fire rate", maxLevel: 6, baseCost: 250, costGrowth: 1.45 },
-  { id: "engine", name: "Turbo Engine", perLevel: "+0.2 m/s speed", maxLevel: 5, baseCost: 180, costGrowth: 1.4 },
-  { id: "fieldKit", name: "Field Repair Kit", perLevel: "+0.2 HP/s regen", maxLevel: 5, baseCost: 220, costGrowth: 1.45 },
-  { id: "salvage", name: "Salvage Crew", perLevel: "+10% supply drops", maxLevel: 10, baseCost: 120, costGrowth: 1.35 },
-  { id: "warChest", name: "War Chest", perLevel: "+50 starting supply", maxLevel: 5, baseCost: 160, costGrowth: 1.5 },
+  // Priced so a first upgrade takes ~2 decent runs and later levels take several
+  { id: "armor", name: "Composite Armor", perLevel: "+10 max hull", maxLevel: 10, baseCost: 350, costGrowth: 1.6 },
+  { id: "gunnery", name: "Gunnery Training", perLevel: "+6% cannon damage", maxLevel: 10, baseCost: 450, costGrowth: 1.65 },
+  { id: "autoloader", name: "Autoloader", perLevel: "+5% fire rate", maxLevel: 6, baseCost: 550, costGrowth: 1.7 },
+  { id: "engine", name: "Turbo Engine", perLevel: "+0.2 m/s speed", maxLevel: 5, baseCost: 400, costGrowth: 1.65 },
+  { id: "fieldKit", name: "Field Repair Kit", perLevel: "+0.2 HP/s regen", maxLevel: 5, baseCost: 500, costGrowth: 1.7 },
+  { id: "salvage", name: "Salvage Crew", perLevel: "+10% supply drops", maxLevel: 10, baseCost: 300, costGrowth: 1.6 },
+  { id: "warChest", name: "War Chest", perLevel: "+50 starting supply", maxLevel: 5, baseCost: 380, costGrowth: 1.75 },
 ];
 
 export type PermUpgradeLevels = Record<PermUpgradeId, number>;
@@ -45,6 +46,9 @@ const EMPTY_LEVELS: PermUpgradeLevels = {
 };
 
 export interface RunReport {
+  /** Supply left unspent at the end of the run */
+  unspentRaw: number;
+  /** Portion of it recovered into the bank */
   unspent: number;
   rankBonus: number;
   bossBonus: number;
@@ -98,10 +102,12 @@ const save = (state: Pick<ProgressionState, "bank" | "lifetimeBanked" | "upgrade
 export const permUpgradeCost = (def: PermUpgradeDef, level: number): number =>
   Math.round((def.baseCost * Math.pow(def.costGrowth, level)) / 10) * 10;
 
-/** Supply awarded per rank reached, on top of unspent supply. */
-export const RANK_BONUS_PER_LEVEL = 10;
+/** Share of unspent run supply that makes it back to the bank. */
+export const SALVAGE_RATE = 0.5;
+/** Supply awarded per rank reached, on top of salvaged supply. */
+export const RANK_BONUS_PER_LEVEL = 5;
 /** Supply awarded per boss destroyed during the run. */
-export const BOSS_BANK_BONUS = 250;
+export const BOSS_BANK_BONUS = 150;
 
 export const useProgression = create<ProgressionState>()((set, get) => ({
   ...load(),
@@ -128,8 +134,10 @@ export const useProgression = create<ProgressionState>()((set, get) => ({
 
   bankRun: (unspent, rankReached, bossesDefeated) => {
     const state = get();
+    const unspentRaw = Math.max(0, Math.floor(unspent));
     const report: RunReport = {
-      unspent: Math.max(0, Math.floor(unspent)),
+      unspentRaw,
+      unspent: Math.floor(unspentRaw * SALVAGE_RATE),
       rankBonus: Math.max(0, rankReached - 1) * RANK_BONUS_PER_LEVEL,
       bossBonus: bossesDefeated * BOSS_BANK_BONUS,
       total: 0,

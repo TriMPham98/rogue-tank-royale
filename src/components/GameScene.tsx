@@ -13,6 +13,7 @@ import SafeZone from "../models/SafeZone";
 import RedZone from "../models/RedZone";
 import BossTank from "../models/BossTank";
 import BossDirector from "./BossDirector";
+import CameraShake from "./CameraShake";
 import {
   Suspense,
   useRef,
@@ -32,6 +33,7 @@ import { debug } from "../utils/debug";
 import { globalFPSTracker } from "../utils/fpsTracker";
 import MobileJoysticks from "../components/MobileJoysticks";
 import { GAME_CONSTANTS } from "../constants/game";
+import { fpvTargetFov } from "../utils/fpvFov";
 import { useObstacleSpatialHash, useEnemySpatialHash, resetSpatialHashes } from "../hooks/useSpatialHash";
 import InstancedProjectiles from "./InstancedProjectiles";
 import InstancedHealthBars from "./InstancedHealthBars";
@@ -246,6 +248,8 @@ const FollowCamera = memo(() => {
   });
   const fpvPrevFirstPersonRef = useRef(false);
   const fpvInitializedRef = useRef(false);
+  const fpvFovRef = useRef(GAME_CONSTANTS.FPV_MIN_FOV as number);
+  const fpvSpeedPosRef = useRef<[number, number]>([0, 0]);
 
   // Compute ideal FPV camera pose (horizon-locked via YXZ Euler)
   const computeFPVTarget = (
@@ -402,7 +406,8 @@ const FollowCamera = memo(() => {
           // Interpolate rotation
           fpvCurrentQuatRef.current.copy(tr.startQuat).slerp(fpvTargetQuatRef.current, s);
           // Interpolate FOV
-          perspCamera.fov = tr.startFov + (GAME_CONSTANTS.FPV_FOV - tr.startFov) * s;
+          fpvFovRef.current = fpvTargetFov(perspCamera.aspect, 0);
+          perspCamera.fov = tr.startFov + (fpvFovRef.current - tr.startFov) * s;
           perspCamera.updateProjectionMatrix();
 
           camera.position.copy(fpvCurrentPosRef.current);
@@ -445,8 +450,19 @@ const FollowCamera = memo(() => {
           camera.position.copy(fpvCurrentPosRef.current);
           camera.quaternion.copy(fpvCurrentQuatRef.current);
 
-          perspCamera.fov = GAME_CONSTANTS.FPV_FOV;
-          perspCamera.updateProjectionMatrix();
+          // Gunner sight: aspect-corrected FOV that opens up a touch at speed
+          const prevPos = fpvSpeedPosRef.current;
+          const moved = Math.hypot(playerPosition[0] - prevPos[0], playerPosition[2] - prevPos[1]);
+          fpvSpeedPosRef.current = [playerPosition[0], playerPosition[2]];
+          const speedFraction = delta > 0 ? moved / delta / Math.max(1, gameState.playerSpeed) : 0;
+          const fovTarget = fpvTargetFov(perspCamera.aspect, speedFraction);
+          fpvFovRef.current +=
+            (fovTarget - fpvFovRef.current) *
+            (1.0 - Math.exp(-GAME_CONSTANTS.FPV_FOV_LERP_FACTOR * delta));
+          if (Math.abs(perspCamera.fov - fpvFovRef.current) > 0.01) {
+            perspCamera.fov = fpvFovRef.current;
+            perspCamera.updateProjectionMatrix();
+          }
         }
         return; // Skip third-person code
       }
@@ -783,6 +799,7 @@ const SceneContent = memo((): JSX.Element => {
         mieDirectionalG={0.85}
       />
       <FollowCamera />
+      <CameraShake />
       <OrbitControls enabled={false} />
     </Suspense>
   );
@@ -941,7 +958,7 @@ const GameScene = () => {
         style={{ width: "100vw", height: "100vh" }}>
         <Canvas
           shadows
-          camera={{ position: [0, 40, 60], fov: 60 }}
+          camera={{ position: [0, 40, 60], fov: 60, near: 0.3, far: 1000 }}
           style={{ width: "100vw", height: "100vh" }}
           onCreated={() => debug.log("Canvas created")}>
           <color attach="background" args={[skyColor]} />

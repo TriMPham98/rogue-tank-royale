@@ -175,8 +175,8 @@ export const createEnemySlice: StateCreator<
             ...updates,
             coins: (state.coins || 0) + coinValue,
           };
-          SoundManager.setVolume("supplyPickUp", 0.55);
-          SoundManager.play("supplyPickUp");
+          SoundManager.setVolume("healthPickUp", 0.3);
+          SoundManager.play("healthPickUp");
         }
       }
 

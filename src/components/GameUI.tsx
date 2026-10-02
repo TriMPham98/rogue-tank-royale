@@ -1,5 +1,6 @@
 import { useGameState, UpgradeableStat, SecondaryWeapon } from "../utils/gameState";
 import "./GameUI.css";
+import "./ui/tacticalTheme.css";
 import { useState, useCallback, useEffect, useRef } from "react";
 import WeaponSelection from "./WeaponSelection";
 import "./WeaponSelection.css";
@@ -21,6 +22,7 @@ import GameOverScreen from "./ui/GameOverScreen";
 import SettingsModal from "./ui/SettingsModal";
 import ConfirmDialog from "./ui/ConfirmDialog";
 import EncounterHUD from "./ui/EncounterHUD";
+import ScreenEffects from "./ui/ScreenEffects";
 import { GAME_CONSTANTS } from "../constants/game";
 import { getMaxEnemies } from "../utils/difficulty";
 
@@ -455,6 +457,7 @@ const GameUI = () => {
       className={`game-ui military-theme ${
         isGameOver ? "blur-background" : ""
       } ${isMobile ? "mobile" : ""}`}>
+      {!isGameOver && <ScreenEffects />}
       <ContainmentWarning
         show={showContainmentWarning && !isGameOver && !isPaused}
         opacity={containmentWarningOpacityRef.current}

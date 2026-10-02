@@ -29,6 +29,8 @@ export const createGameFlowSlice: StateCreator<
   isTerrainReady: false,
   isFirstPersonView: false,
 
+  runId: 0,
+
   // Level progression
   level: 1,
   score: 0,
@@ -61,6 +63,7 @@ export const createGameFlowSlice: StateCreator<
       ...initialEncounterState,
       // Armory upgrades overwrite the base stats (and grant starting supply)
       ...getRunStartStats(),
+      runId: get().runId + 1,
       isGameOver: false,
       isPaused: false,
       level: 1,
@@ -100,6 +103,7 @@ export const createGameFlowSlice: StateCreator<
       ...initialWeaponState,
       ...initialTerrainState,
       ...initialEncounterState,
+      runId: get().runId + 1,
       isGameOver: false,
       isPaused: false,
       isGameStarted: false,

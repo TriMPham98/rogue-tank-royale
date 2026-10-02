@@ -75,6 +75,13 @@ export const PLAYER_TANK_MATS = {
     emissiveIntensity: 0.2,
   }),
   hazard: standard("#d4a017", { roughness: 0.45, metalness: 0.2 }),
+  accent: standard("#7ff6ff", {
+    emissive: new Color("#19d4ff"),
+    emissiveIntensity: 2.2,
+    roughness: 0.3,
+    metalness: 0.1,
+    toneMapped: false,
+  }),
 };
 
 export const ENEMY_TANK_MATS = {

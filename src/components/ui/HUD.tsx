@@ -42,7 +42,10 @@ const HUD: React.FC<HUDProps> = ({
 
   return (
     <div className="top-hud">
-      <div className="hud-element hull-integrity">
+      <div
+        className={`hud-element hull-integrity ${
+          hullIntegrityPercentage <= 30 ? "critical" : ""
+        }`}>
         <div className="hud-label">HULL INTEGRITY</div>
         <div className="progress-bar-container">
           <div
@@ -59,11 +62,13 @@ const HUD: React.FC<HUDProps> = ({
       </div>
       <div className="hud-element combat-score">
         <div className="hud-label">COMBAT SCORE</div>
-        <div className="score-value">{score}</div>
+        <div className="score-value" key={score}>
+          {score.toLocaleString("en-US")}
+        </div>
       </div>
       <div className="hud-element coin-balance-hud">
         <div className="hud-label">SUPPLY</div>
-        <div className="score-value">
+        <div className="score-value" key={coins}>
           {formatSupply(coins)} <span className="supply-unit">SP</span>
         </div>
       </div>

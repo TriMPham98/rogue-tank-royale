@@ -100,7 +100,14 @@ export const GAME_CONSTANTS = {
   FIRST_PERSON_FOV: 75,
 
   // First-person view (anti-nausea)
-  FPV_FOV: 65,
+  /** Horizontal gunner-sight FOV (deg); vertical FOV is derived per aspect ratio */
+  FPV_HORIZONTAL_FOV: 96,
+  FPV_MIN_FOV: 56,
+  FPV_MAX_FOV: 72,
+  /** Extra degrees of FOV at full forward speed */
+  FPV_SPEED_FOV_BOOST: 4,
+  /** How quickly the FPV FOV eases toward its target (1/s) */
+  FPV_FOV_LERP_FACTOR: 3,
   FPV_EYE_HEIGHT: 2.0,
   FPV_FORWARD_OFFSET: -0.5,
   FPV_POSITION_LERP_FACTOR: 4.0,

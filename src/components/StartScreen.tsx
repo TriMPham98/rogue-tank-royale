@@ -9,6 +9,7 @@ import { debug } from "../utils/debug";
 import { useSettings } from "../utils/settingsContext";
 import ArmoryPanel from "./ui/ArmoryPanel";
 import "./ui/ArmoryPanel.css";
+import "./ui/startHero.css";
 import { formatSupply, useProgression } from "../state/progression";
 
 type TransitionStep = "idle" | "fading" | "assembling";
@@ -34,6 +35,10 @@ const StartScreen: React.FC = () => {
   const overlayOpenRef = useRef(false);
   overlayOpenRef.current = showArmory || showSettings;
   const bank = useProgression((s) => s.bank);
+  const lifetimeBanked = useProgression((s) => s.lifetimeBanked);
+  const armoryLevels = useProgression((s) =>
+    Object.values(s.upgrades).reduce((sum, level) => sum + level, 0)
+  );
 
   // Settings context
   const {
@@ -157,7 +162,10 @@ const StartScreen: React.FC = () => {
   };
 
   return (
-    <div className={`start-screen military-theme ${isMobile ? "mobile" : ""}`}>
+    <div
+      className={`start-screen hero military-theme ${isMobile ? "mobile" : ""} ${
+        transitionStep !== "idle" ? "deploying" : ""
+      }`}>
       {/* Tank wireframe as background */}
       <div className="tank-wireframe-background">
         <TankWireframeDisplay
@@ -169,12 +177,35 @@ const StartScreen: React.FC = () => {
         />
       </div>
 
+      {/* HUD frame: corner brackets + status bars, like the in-game UI */}
+      <div className={`hero-frame ${transitionStep !== "idle" ? "fading-out" : ""}`} aria-hidden="true">
+        <span className="hero-corner tl" />
+        <span className="hero-corner tr" />
+        <span className="hero-corner bl" />
+        <span className="hero-corner br" />
+        <div className="hero-topbar">
+          <span className="hero-dot" /> SYS ONLINE
+          <span className="hero-sep">//</span> MBT-7 &ldquo;ROGUE&rdquo;
+          <span className="hero-sep">//</span> ARENA LINK STABLE
+        </div>
+        <div className="hero-bottombar">
+          <span>[WASD] MOVE</span>
+          <span>[J/K] AIM</span>
+          <span>[V] GUNNER SIGHT</span>
+          <span>[ESC] PAUSE</span>
+        </div>
+      </div>
+
       {/* Apply fading class based on transition state */}
       <div
-        className={`start-screen-content ${
+        className={`start-screen-content hero-panel ${
           transitionStep !== "idle" ? "fading-out" : ""
         }`}>
-        <h1 className="game-title">ROGUE TANK ROYALE</h1>
+        <div className="hero-kicker">TACTICAL ARENA SURVIVAL</div>
+        <h1 className="game-title">
+          <span className="title-line">ROGUE TANK</span>
+          <span className="title-line accent">ROYALE</span>
+        </h1>
         <h2 className="game-subtitle">
           {subtitleText}
           {subtitleText.length < fullSubtitle.length &&
@@ -189,21 +220,43 @@ const StartScreen: React.FC = () => {
         </div>
 
         <button className="start-button" onClick={handleStartGame}>
-          DEPLOY UNIT
+          DEPLOY UNIT <span className="key-hint">ENTER</span>
         </button>
-        <button
-          className="settings-button-start armory-button-start"
-          onClick={() => setShowArmory(true)}>
-          ARMORY{" "}
-          <span className="armory-button-bank">{formatSupply(bank)} SP</span>
-        </button>
-        <button className="settings-button-start" onClick={handleOpenSettings}>
-          SETTINGS
-        </button>
+        <div className="hero-secondary">
+          <button
+            className="settings-button-start armory-button-start"
+            onClick={() => setShowArmory(true)}>
+            ARMORY{" "}
+            <span className="armory-button-bank">{formatSupply(bank)} SP</span>
+          </button>
+          <button className="settings-button-start" onClick={handleOpenSettings}>
+            SETTINGS
+          </button>
+        </div>
+
+        <div className="hero-stats">
+          <div className="hero-stat">
+            <span className="hero-stat-label">BANKED SP</span>
+            <span className="hero-stat-value gold">{formatSupply(bank)}</span>
+          </div>
+          <div className="hero-stat">
+            <span className="hero-stat-label">ARMORY LV</span>
+            <span className="hero-stat-value">{armoryLevels}</span>
+          </div>
+          <div className="hero-stat">
+            <span className="hero-stat-label">LIFETIME SP</span>
+            <span className="hero-stat-value">{formatSupply(lifetimeBanked)}</span>
+          </div>
+        </div>
       </div>
       {/* Conditionally render Loading text during fade/assembly */}
       {transitionStep === "fading" && (
-        <div className="loading-text">Loading...</div>
+        <div className="loading-text">
+          <span className="loading-label">ASSEMBLING UNIT</span>
+          <span className="loading-bar">
+            <span className="loading-bar-fill" />
+          </span>
+        </div>
       )}
 
       {showArmory && (
@@ -211,7 +264,7 @@ const StartScreen: React.FC = () => {
           <div className="armory-overlay-inner" onClick={(e) => e.stopPropagation()}>
             <ArmoryPanel />
             <p className="armory-overlay-hint">
-              Unspent supply and rank bonuses are banked at the end of every run.
+              Half your unspent supply plus rank and boss bonuses are banked at the end of every run.
               Upgrades apply automatically on deploy.
             </p>
             <button

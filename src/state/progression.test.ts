@@ -7,6 +7,7 @@ import {
   formatSupply,
   RANK_BONUS_PER_LEVEL,
   BOSS_BANK_BONUS,
+  SALVAGE_RATE,
 } from "./progression";
 import { GAME_CONSTANTS } from "../constants/game";
 
@@ -42,7 +43,8 @@ describe("progression", () => {
 
   it("banks unspent supply plus rank and boss bonuses, and persists", () => {
     const report = useProgression.getState().bankRun(340, 12, 1);
-    expect(report.unspent).toBe(340);
+    expect(report.unspentRaw).toBe(340);
+    expect(report.unspent).toBe(340 * SALVAGE_RATE);
     expect(report.rankBonus).toBe(11 * RANK_BONUS_PER_LEVEL);
     expect(report.bossBonus).toBe(BOSS_BANK_BONUS);
     expect(useProgression.getState().bank).toBe(report.total);

@@ -1,0 +1,400 @@
+/*
+ * Hero (start screen) skin matching the in-game tactical theme:
+ * Orbitron / Rajdhani / Share Tech Mono, dark glass chamfered panel,
+ * corner brackets, segmented accents. Layered over StartScreen.css.
+ */
+
+.start-screen.hero {
+  --hero-accent: #5fdc5f;
+  --hero-accent-dim: rgba(95, 220, 95, 0.35);
+  --hero-font: "Rajdhani", "Arial Narrow", sans-serif;
+  --hero-mono: "Share Tech Mono", "Courier New", monospace;
+  --hero-title: "Orbitron", "Rajdhani", sans-serif;
+  justify-content: flex-start;
+  padding-left: max(32px, 6vw);
+  box-sizing: border-box;
+  background:
+    radial-gradient(ellipse at 70% 55%, rgba(40, 90, 40, 0.28), transparent 60%),
+    radial-gradient(ellipse at center, #121812 0%, #070a07 100%);
+  font-family: var(--hero-font);
+}
+
+/* Push the blueprint tank right so the panel and the tank share the frame */
+.start-screen.hero .tank-wireframe-background {
+  transform: translateX(16vw);
+  transition: transform 1.2s cubic-bezier(0.6, 0, 0.2, 1);
+}
+
+.start-screen.hero.deploying .tank-wireframe-background {
+  transform: none;
+}
+
+/* --- Panel --- */
+.start-screen.hero .hero-panel {
+  align-items: flex-start;
+  text-align: left;
+  max-width: 540px;
+  padding: 34px 36px 28px;
+  /* Never let long values push a horizontal scrollbar onto the panel */
+  overflow-x: hidden;
+  border: 1px solid var(--hero-accent-dim);
+  border-radius: 0;
+  background:
+    linear-gradient(var(--hero-accent), var(--hero-accent)) top left / 18px 2px no-repeat,
+    linear-gradient(var(--hero-accent), var(--hero-accent)) top left / 2px 18px no-repeat,
+    linear-gradient(var(--hero-accent), var(--hero-accent)) bottom right / 18px 2px no-repeat,
+    linear-gradient(var(--hero-accent), var(--hero-accent)) bottom right / 2px 18px no-repeat,
+    linear-gradient(160deg, rgba(14, 22, 14, 0.85), rgba(6, 10, 6, 0.72));
+  clip-path: polygon(20px 0, 100% 0, 100% calc(100% - 20px), calc(100% - 20px) 100%, 0 100%, 0 20px);
+  box-shadow: inset 0 0 40px rgba(95, 220, 95, 0.07);
+  backdrop-filter: blur(6px);
+  animation: hero-panel-in 0.7s cubic-bezier(0.2, 0.9, 0.3, 1.1);
+}
+
+@keyframes hero-panel-in {
+  from {
+    opacity: 0;
+    transform: translateX(-24px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.start-screen.hero .hero-kicker {
+  font-family: var(--hero-mono);
+  font-size: 0.8rem;
+  letter-spacing: 0.4em;
+  color: rgba(160, 208, 160, 0.75);
+  margin-bottom: 10px;
+}
+
+.start-screen.hero .game-title {
+  font-family: var(--hero-title);
+  font-weight: 800;
+  font-size: clamp(2rem, 4.2vw, 3.1rem);
+  letter-spacing: 0.06em;
+  line-height: 1.02;
+  display: flex;
+  flex-direction: column;
+  animation: none;
+}
+
+.start-screen.hero .title-line {
+  white-space: nowrap;
+}
+
+.start-screen.hero .title-line.accent {
+  color: transparent;
+  -webkit-text-stroke: 1.5px var(--hero-accent);
+  text-shadow: 0 0 18px rgba(95, 220, 95, 0.45);
+  letter-spacing: 0.32em;
+}
+
+.start-screen.hero .game-subtitle {
+  font-family: var(--hero-font);
+  font-weight: 600;
+  font-size: 1.2rem;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  margin: 12px 0 14px;
+}
+
+.start-screen.hero .title-decoration {
+  width: 100%;
+  margin: 4px 0 22px;
+}
+
+.start-screen.hero .title-decoration .line {
+  background: repeating-linear-gradient(90deg, var(--hero-accent-dim) 0 10px, transparent 10px 14px);
+  height: 2px;
+}
+
+/* --- Buttons --- */
+.start-screen.hero .start-button,
+.start-screen.hero .settings-button-start {
+  font-family: var(--hero-font);
+  font-weight: 700;
+  letter-spacing: 0.24em;
+  border-radius: 0;
+}
+
+.start-screen.hero .start-button {
+  clip-path: polygon(10px 0, 100% 0, calc(100% - 10px) 100%, 0 100%);
+}
+
+.start-screen.hero .start-button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 26px;
+  font-size: 1.35rem;
+  background: linear-gradient(90deg, rgba(95, 220, 95, 0.22), rgba(95, 220, 95, 0.06));
+  border: 1px solid var(--hero-accent);
+}
+
+.start-screen.hero .start-button:hover {
+  background: linear-gradient(90deg, rgba(95, 220, 95, 0.4), rgba(95, 220, 95, 0.12));
+}
+
+.start-screen.hero .key-hint {
+  font-family: var(--hero-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  padding: 3px 8px;
+  border: 1px solid var(--hero-accent-dim);
+  color: rgba(160, 208, 160, 0.9);
+  text-shadow: none;
+}
+
+.start-screen.hero .hero-secondary {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+  margin-top: 12px;
+}
+
+.start-screen.hero .hero-secondary .settings-button-start {
+  flex: 1;
+  margin: 0;
+  font-size: 1rem;
+  padding: 11px 16px;
+  border-width: 1px;
+}
+
+.start-screen.hero .armory-button-bank {
+  font-family: var(--hero-mono);
+}
+
+/* --- Stat strip --- */
+.start-screen.hero .hero-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  width: 100%;
+  margin-top: 22px;
+  padding-top: 14px;
+  border-top: 1px solid var(--hero-accent-dim);
+}
+
+.start-screen.hero .hero-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.start-screen.hero .hero-stat-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--hero-font);
+  font-weight: 700;
+  font-size: 0.68rem;
+  letter-spacing: 0.24em;
+  color: rgba(160, 208, 160, 0.7);
+}
+
+.start-screen.hero .hero-stat-value {
+  font-family: var(--hero-mono);
+  font-size: clamp(1rem, 1.8vw, 1.35rem);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--hero-accent);
+  text-shadow: 0 0 10px rgba(95, 220, 95, 0.45);
+}
+
+.start-screen.hero .hero-stat-value.gold {
+  color: #ffd54a;
+  text-shadow: 0 0 10px rgba(255, 213, 74, 0.4);
+}
+
+/* --- Screen frame --- */
+.start-screen.hero .hero-frame {
+  position: absolute;
+  inset: 18px;
+  pointer-events: none;
+  z-index: 3;
+  transition: opacity 0.5s ease-out;
+}
+
+.start-screen.hero .hero-frame.fading-out {
+  opacity: 0;
+}
+
+.start-screen.hero .hero-corner {
+  position: absolute;
+  width: 34px;
+  height: 34px;
+  border-color: var(--hero-accent-dim);
+  border-style: solid;
+  border-width: 0;
+}
+
+.start-screen.hero .hero-corner.tl {
+  top: 0;
+  left: 0;
+  border-top-width: 2px;
+  border-left-width: 2px;
+}
+
+.start-screen.hero .hero-corner.tr {
+  top: 0;
+  right: 0;
+  border-top-width: 2px;
+  border-right-width: 2px;
+}
+
+.start-screen.hero .hero-corner.bl {
+  bottom: 0;
+  left: 0;
+  border-bottom-width: 2px;
+  border-left-width: 2px;
+}
+
+.start-screen.hero .hero-corner.br {
+  bottom: 0;
+  right: 0;
+  border-bottom-width: 2px;
+  border-right-width: 2px;
+}
+
+.start-screen.hero .hero-topbar,
+.start-screen.hero .hero-bottombar {
+  position: absolute;
+  left: 50px;
+  right: 50px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--hero-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.22em;
+  color: rgba(160, 208, 160, 0.6);
+}
+
+.start-screen.hero .hero-topbar {
+  top: 8px;
+}
+
+.start-screen.hero .hero-bottombar {
+  bottom: 8px;
+  justify-content: flex-end;
+  gap: 22px;
+}
+
+.start-screen.hero .hero-sep {
+  color: rgba(95, 220, 95, 0.35);
+}
+
+.start-screen.hero .hero-dot {
+  width: 7px;
+  height: 7px;
+  background: var(--hero-accent);
+  box-shadow: 0 0 8px var(--hero-accent);
+  animation: hero-blink 1.4s steps(2, jump-none) infinite;
+}
+
+@keyframes hero-blink {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.25;
+  }
+}
+
+/* --- Deploy loading readout --- */
+.start-screen.hero .loading-text {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  opacity: 1;
+  animation: none;
+  font-family: var(--hero-mono);
+  font-size: 0.85rem;
+  letter-spacing: 0.4em;
+}
+
+.start-screen.hero .loading-label {
+  animation: hero-blink 0.8s steps(2, jump-none) infinite;
+}
+
+.start-screen.hero .loading-bar {
+  width: 260px;
+  height: 8px;
+  border: 1px solid var(--hero-accent-dim);
+  clip-path: polygon(4px 0, 100% 0, calc(100% - 4px) 100%, 0 100%);
+  overflow: hidden;
+}
+
+.start-screen.hero .loading-bar-fill {
+  display: block;
+  height: 100%;
+  width: 100%;
+  transform-origin: left;
+  background: repeating-linear-gradient(90deg, var(--hero-accent) 0 10px, transparent 10px 12px);
+  box-shadow: 0 0 10px var(--hero-accent);
+  /* Matches the 4s wireframe assembly */
+  animation: hero-load 4s linear forwards;
+}
+
+@keyframes hero-load {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+/* --- Mobile / narrow: centre everything, keep the tank behind --- */
+.start-screen.hero.mobile {
+  justify-content: center;
+  padding-left: 0;
+}
+
+.start-screen.hero.mobile .tank-wireframe-background {
+  transform: none;
+}
+
+.start-screen.hero.mobile .hero-panel {
+  align-items: center;
+  text-align: center;
+  padding: 18px 18px 16px;
+}
+
+.start-screen.hero.mobile .hero-topbar,
+.start-screen.hero.mobile .hero-bottombar {
+  display: none;
+}
+
+.start-screen.hero.mobile .hero-stats {
+  margin-top: 12px;
+}
+
+@media (max-width: 900px) {
+  .start-screen.hero {
+    justify-content: center;
+    padding-left: 0;
+  }
+
+  .start-screen.hero .tank-wireframe-background {
+    transform: none;
+  }
+
+  .start-screen.hero .hero-bottombar {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .start-screen.hero .hero-panel,
+  .start-screen.hero .hero-dot,
+  .start-screen.hero .loading-label {
+    animation: none;
+  }
+}

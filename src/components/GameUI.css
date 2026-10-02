@@ -2008,3 +2008,18 @@
 .game-ui.military-theme.mobile .boss-banner-title {
   font-size: 1.1rem;
 }
+
+.military-theme .boss-banner-arsenal,
+.military-theme .boss-bar-arsenal {
+  font-size: 0.7rem;
+  letter-spacing: 0.14em;
+  color: #ff9a86;
+}
+
+.military-theme .boss-banner-arsenal {
+  margin-top: 6px;
+}
+
+.military-theme .boss-bar-arsenal {
+  margin-bottom: 3px;
+}
