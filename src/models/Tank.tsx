@@ -17,6 +17,8 @@ import { useTankCollision } from "../hooks/useTankCollision";
 import { cameraShake } from "../systems/cameraShake";
 import { MUZZLE_Z } from "./tankVisuals/playerTankParts";
 import { checkVehicleCollision, resolveMove } from "../utils/vehicleCollision";
+import { enemyBodyRadius } from "../utils/enemyHitbox";
+import { getEnemyVisualPosition } from "../utils/enemyVisualPositions";
 import { usePooledProjectiles } from "../hooks/usePooledProjectiles";
 import { fx, FX_COLORS } from "./fx/fxSystem";
 
@@ -39,17 +41,35 @@ const MAX_SIDE_WEAPONS = GAME_CONSTANTS.MAX_SIDE_WEAPONS;
 
 // --- Demo / recording mode (?demo=1) ---------------------------------------
 // Autopilot for capturing footage: the hull wanders on smooth sine-driven
-// steering leashed to the fight, the turret tracks the nearest enemy on a
-// damped spring, and the cannon fires only once it's on target.
+// steering leashed to a ring around the fight, is pushed off a standoff
+// distance from every enemy so it orbits rather than rams, the turret tracks
+// the nearest enemy on a damped spring, and the cannon fires only once it's
+// on target.
 const DEMO =
   typeof window !== "undefined" &&
   new URLSearchParams(window.location.search).has("demo");
 
 const DEMO_MAX_STEER = 1.1; // rad/s
 const DEMO_STEER_SMOOTHING = 2.5; // 1/s, exponential low-pass
-const DEMO_LEASH = 14; // units from the action before steering pulls back
-const DEMO_LEASH_FULL = 24; // distance at which the pull fully overrides wander
+const DEMO_MAX_STEER_ACCEL = 2.5; // rad/s^2, caps how fast steer can change
+const DEMO_MAX_THROTTLE_RATE = 1.2; // 1/s, caps how fast throttle can change
+const DEMO_LEASH = 3; // units from the ring point before steering pulls back
+const DEMO_LEASH_FULL = 10; // distance at which the pull fully overrides wander
 const DEMO_CLUSTER_RADIUS = 12;
+const DEMO_RING_RADIUS = 11; // orbit distance from the enemy cluster centroid
+const DEMO_RING_LEAD = 0.35; // rad, ring target leads the tank so it circles
+// Standoff, in multiples of contact distance (player + enemy body radius):
+// repulsion starts fading in at OUTER, is at full strength by INNER.
+const DEMO_STANDOFF_OUTER = 4;
+const DEMO_STANDOFF_INNER = 2.5;
+const DEMO_REVERSE_THROTTLE = -0.3; // gentle back-off when an enemy is dead ahead
+
+declare global {
+  interface Window {
+    __demoStats?: { minDist: number; minRatio: number };
+    __demoContact?: number | null;
+  }
+}
 const DEMO_TURRET_MAX_VEL = 2.2; // rad/s
 const DEMO_TURRET_OMEGA = 5; // critically-damped spring natural frequency
 const DEMO_FIRE_TOLERANCE = 0.15; // rad
@@ -62,6 +82,7 @@ interface DemoState {
   targetId: string | null;
   turretVel: number;
   aimed: boolean;
+  orbitDir: number; // +1 / -1, which way the hull circles the fight
 }
 
 const createDemoState = (): DemoState => ({
@@ -71,20 +92,36 @@ const createDemoState = (): DemoState => ({
   targetId: null,
   turretVel: 0,
   aimed: false,
+  orbitDir: 1,
 });
 
 const wrapAngle = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
+const smoothstep = (k: number) => k * k * (3 - 2 * k);
+const clamp01 = (k: number) => Math.max(0, Math.min(1, k));
 
-/** Centroid of the live enemies clustered around the one nearest (x, z). */
-function demoAnchor(x: number, z: number, enemies: Enemy[]): [number, number] {
-  let nearest: Enemy | null = null;
+/** Where the hull collision code sees this enemy (visual, else logical). */
+const demoEnemyPos = (e: Enemy) => getEnemyVisualPosition(e.id) ?? e.position;
+
+/**
+ * Point on a ring of DEMO_RING_RADIUS around the centroid of the live enemies
+ * clustered near (x, z), placed just ahead of the tank's bearing around that
+ * centroid in `orbitDir` so seeking it circles the fight instead of entering.
+ */
+function demoAnchor(
+  x: number,
+  z: number,
+  enemies: Enemy[],
+  orbitDir: number
+): [number, number] {
+  let nearest: [number, number, number] | null = null;
   let best = Infinity;
   for (const e of enemies) {
     if (e.health <= 0) continue;
-    const d = (e.position[0] - x) ** 2 + (e.position[2] - z) ** 2;
+    const p = demoEnemyPos(e);
+    const d = (p[0] - x) ** 2 + (p[2] - z) ** 2;
     if (d < best) {
       best = d;
-      nearest = e;
+      nearest = p;
     }
   }
   if (!nearest) return [0, 0];
@@ -93,14 +130,21 @@ function demoAnchor(x: number, z: number, enemies: Enemy[]): [number, number] {
   let n = 0;
   for (const e of enemies) {
     if (e.health <= 0) continue;
-    const dx = e.position[0] - nearest.position[0];
-    const dz = e.position[2] - nearest.position[2];
+    const p = demoEnemyPos(e);
+    const dx = p[0] - nearest[0];
+    const dz = p[2] - nearest[2];
     if (dx * dx + dz * dz > DEMO_CLUSTER_RADIUS * DEMO_CLUSTER_RADIUS) continue;
-    sx += e.position[0];
-    sz += e.position[2];
+    sx += p[0];
+    sz += p[2];
     n++;
   }
-  return [sx / n, sz / n];
+  const cx = sx / n;
+  const cz = sz / n;
+  const bearing = Math.atan2(x - cx, z - cz) + orbitDir * DEMO_RING_LEAD;
+  return [
+    cx + Math.sin(bearing) * DEMO_RING_RADIUS,
+    cz + Math.cos(bearing) * DEMO_RING_RADIUS,
+  ];
 }
 
 /** Advance hull autopilot; writes smoothed `steer` (rad/s) and `throttle`. */
@@ -119,22 +163,85 @@ function stepDemoHull(
     0.35 * Math.sin(t * 0.73 + 1.3) +
     0.2 * Math.sin(t * 0.17 + 2.1);
 
-  const [ax, az] = demoAnchor(x, z, enemies);
+  // Standoff: accumulate an away-from-enemies vector weighted by how far each
+  // enemy is inside its standoff band, and how much of that is dead ahead.
+  const fwdX = Math.sin(heading);
+  const fwdZ = Math.cos(heading);
+  let repX = 0;
+  let repZ = 0;
+  let ahead = 0;
+  let minDist = Infinity;
+  let minContact = 0;
+  for (const e of enemies) {
+    if (e.health <= 0) continue;
+    const p = demoEnemyPos(e);
+    const dx = x - p[0];
+    const dz = z - p[2];
+    const dist = Math.hypot(dx, dz);
+    const contact = GAME_CONSTANTS.TANK_RADIUS + enemyBodyRadius(e.type);
+    if (dist < minDist) {
+      minDist = dist;
+      minContact = contact;
+    }
+    const outer = contact * DEMO_STANDOFF_OUTER;
+    if (dist >= outer || dist < 1e-4) continue;
+    const inner = contact * DEMO_STANDOFF_INNER;
+    const w = smoothstep(clamp01((outer - dist) / (outer - inner)));
+    repX += (dx / dist) * w;
+    repZ += (dz / dist) * w;
+    // cos of angle between heading and the direction to the enemy
+    const facing = -(dx * fwdX + dz * fwdZ) / dist;
+    if (facing > 0) ahead = Math.max(ahead, w * facing);
+  }
+  window.__demoStats = {
+    minDist,
+    minRatio: minContact > 0 ? minDist / minContact : Infinity,
+  };
+  window.__demoContact = minContact > 0 ? minContact : null;
+
+  const repMag = Math.hypot(repX, repZ);
+  const repW = Math.min(1, repMag);
+
+  // Orbit direction follows which way we're already sliding past the
+  // threat; otherwise keep the previous choice so it doesn't flip-flop.
+  if (repMag > 1e-3) {
+    const cross = fwdX * repZ - fwdZ * repX;
+    if (Math.abs(cross) > 0.2 * repMag) d.orbitDir = cross > 0 ? 1 : -1;
+  }
+
+  const [ax, az] = demoAnchor(x, z, enemies, d.orbitDir);
   const dist = Math.hypot(ax - x, az - z);
   let raw = wander;
   if (dist > DEMO_LEASH) {
     const k = Math.min(1, (dist - DEMO_LEASH) / (DEMO_LEASH_FULL - DEMO_LEASH));
-    const w = k * k * (3 - 2 * k); // smoothstep
+    const w = smoothstep(k);
     const err = wrapAngle(Math.atan2(ax - x, az - z) - heading);
     const seek = Math.max(-1, Math.min(1, err * 1.5));
     raw = wander * (1 - w) + seek * w;
   }
+
+  if (repW > 0) {
+    // Head along the tangent of the repulsion (orbit), tilting outward as
+    // the push grows so a deep incursion backs out of the ring.
+    const away = Math.atan2(repX, repZ);
+    const desired = away + d.orbitDir * (Math.PI / 2) * (1 - 0.5 * repW);
+    const err = wrapAngle(desired - heading);
+    const evade = Math.max(-1, Math.min(1, err * 1.5));
+    raw = raw * (1 - repW) + evade * repW;
+  }
   raw = Math.max(-DEMO_MAX_STEER, Math.min(DEMO_MAX_STEER, raw * DEMO_MAX_STEER));
 
   const a = 1 - Math.exp(-DEMO_STEER_SMOOTHING * delta);
-  d.steer += (raw - d.steer) * a;
-  const throttleTarget = 0.8 + 0.2 * Math.sin(t * 0.29 + Math.sin(t * 0.11) * 2);
-  d.throttle += (throttleTarget - d.throttle) * a;
+  const maxSteerStep = DEMO_MAX_STEER_ACCEL * delta;
+  d.steer += Math.max(-maxSteerStep, Math.min(maxSteerStep, (raw - d.steer) * a));
+
+  const cruise = 0.8 + 0.2 * Math.sin(t * 0.29 + Math.sin(t * 0.11) * 2);
+  const throttleTarget = cruise * (1 - ahead) + DEMO_REVERSE_THROTTLE * ahead;
+  const maxThrottleStep = DEMO_MAX_THROTTLE_RATE * delta;
+  d.throttle += Math.max(
+    -maxThrottleStep,
+    Math.min(maxThrottleStep, (throttleTarget - d.throttle) * a)
+  );
 }
 
 /**
