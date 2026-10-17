@@ -55,13 +55,13 @@ const DEMO_MAX_STEER_ACCEL = 2.5; // rad/s^2, caps how fast steer can change
 const DEMO_MAX_THROTTLE_RATE = 1.2; // 1/s, caps how fast throttle can change
 const DEMO_LEASH = 3; // units from the ring point before steering pulls back
 const DEMO_LEASH_FULL = 10; // distance at which the pull fully overrides wander
-const DEMO_CLUSTER_RADIUS = 12;
-const DEMO_RING_RADIUS = 11; // orbit distance from the enemy cluster centroid
+const DEMO_CLUSTER_RADIUS = 14;
+const DEMO_RING_RADIUS = 7.5; // orbit distance from the enemy cluster centroid
 const DEMO_RING_LEAD = 0.35; // rad, ring target leads the tank so it circles
 // Standoff, in multiples of contact distance (player + enemy body radius):
 // repulsion starts fading in at OUTER, is at full strength by INNER.
-const DEMO_STANDOFF_OUTER = 4;
-const DEMO_STANDOFF_INNER = 2.5;
+const DEMO_STANDOFF_OUTER = 3.2;
+const DEMO_STANDOFF_INNER = 2.3;
 const DEMO_REVERSE_THROTTLE = -0.3; // gentle back-off when an enemy is dead ahead
 
 declare global {
