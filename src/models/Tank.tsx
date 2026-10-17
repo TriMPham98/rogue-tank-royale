@@ -3,7 +3,7 @@ import { useFrame } from "@react-three/fiber";
 import { Group, Vector3, Quaternion, Euler } from "three";
 import PlayerTankMesh from "./tankVisuals/PlayerTankMesh";
 import { useKeyboardControls } from "../hooks/useKeyboardControls";
-import { useGameState, SecondaryWeapon } from "../utils/gameState";
+import { useGameState, SecondaryWeapon, Enemy } from "../utils/gameState";
 import { debug } from "../utils/debug";
 import { useSound, resetSoundTimer } from "../utils/sound";
 import SniperRifle from "./SniperRifle";
@@ -36,6 +36,162 @@ const RECOIL_ROCK_STIFFNESS = 140;
 const RECOIL_ROCK_DAMPING = 13;
 const SIDE_WEAPON_Y_OFFSET = GAME_CONSTANTS.SIDE_WEAPON_Y_OFFSET;
 const MAX_SIDE_WEAPONS = GAME_CONSTANTS.MAX_SIDE_WEAPONS;
+
+// --- Demo / recording mode (?demo=1) ---------------------------------------
+// Autopilot for capturing footage: the hull wanders on smooth sine-driven
+// steering leashed to the fight, the turret tracks the nearest enemy on a
+// damped spring, and the cannon fires only once it's on target.
+const DEMO =
+  typeof window !== "undefined" &&
+  new URLSearchParams(window.location.search).has("demo");
+
+const DEMO_MAX_STEER = 1.1; // rad/s
+const DEMO_STEER_SMOOTHING = 2.5; // 1/s, exponential low-pass
+const DEMO_LEASH = 14; // units from the action before steering pulls back
+const DEMO_LEASH_FULL = 24; // distance at which the pull fully overrides wander
+const DEMO_CLUSTER_RADIUS = 12;
+const DEMO_TURRET_MAX_VEL = 2.2; // rad/s
+const DEMO_TURRET_OMEGA = 5; // critically-damped spring natural frequency
+const DEMO_FIRE_TOLERANCE = 0.15; // rad
+const DEMO_RETARGET_RATIO = 0.75; // switch only when 25% closer
+
+interface DemoState {
+  t: number;
+  steer: number;
+  throttle: number;
+  targetId: string | null;
+  turretVel: number;
+  aimed: boolean;
+}
+
+const createDemoState = (): DemoState => ({
+  t: 0,
+  steer: 0,
+  throttle: 0.8,
+  targetId: null,
+  turretVel: 0,
+  aimed: false,
+});
+
+const wrapAngle = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
+
+/** Centroid of the live enemies clustered around the one nearest (x, z). */
+function demoAnchor(x: number, z: number, enemies: Enemy[]): [number, number] {
+  let nearest: Enemy | null = null;
+  let best = Infinity;
+  for (const e of enemies) {
+    if (e.health <= 0) continue;
+    const d = (e.position[0] - x) ** 2 + (e.position[2] - z) ** 2;
+    if (d < best) {
+      best = d;
+      nearest = e;
+    }
+  }
+  if (!nearest) return [0, 0];
+  let sx = 0;
+  let sz = 0;
+  let n = 0;
+  for (const e of enemies) {
+    if (e.health <= 0) continue;
+    const dx = e.position[0] - nearest.position[0];
+    const dz = e.position[2] - nearest.position[2];
+    if (dx * dx + dz * dz > DEMO_CLUSTER_RADIUS * DEMO_CLUSTER_RADIUS) continue;
+    sx += e.position[0];
+    sz += e.position[2];
+    n++;
+  }
+  return [sx / n, sz / n];
+}
+
+/** Advance hull autopilot; writes smoothed `steer` (rad/s) and `throttle`. */
+function stepDemoHull(
+  d: DemoState,
+  delta: number,
+  x: number,
+  z: number,
+  heading: number,
+  enemies: Enemy[]
+) {
+  d.t += delta;
+  const t = d.t;
+  const wander =
+    0.55 * Math.sin(t * 0.31) +
+    0.35 * Math.sin(t * 0.73 + 1.3) +
+    0.2 * Math.sin(t * 0.17 + 2.1);
+
+  const [ax, az] = demoAnchor(x, z, enemies);
+  const dist = Math.hypot(ax - x, az - z);
+  let raw = wander;
+  if (dist > DEMO_LEASH) {
+    const k = Math.min(1, (dist - DEMO_LEASH) / (DEMO_LEASH_FULL - DEMO_LEASH));
+    const w = k * k * (3 - 2 * k); // smoothstep
+    const err = wrapAngle(Math.atan2(ax - x, az - z) - heading);
+    const seek = Math.max(-1, Math.min(1, err * 1.5));
+    raw = wander * (1 - w) + seek * w;
+  }
+  raw = Math.max(-DEMO_MAX_STEER, Math.min(DEMO_MAX_STEER, raw * DEMO_MAX_STEER));
+
+  const a = 1 - Math.exp(-DEMO_STEER_SMOOTHING * delta);
+  d.steer += (raw - d.steer) * a;
+  const throttleTarget = 0.8 + 0.2 * Math.sin(t * 0.29 + Math.sin(t * 0.11) * 2);
+  d.throttle += (throttleTarget - d.throttle) * a;
+}
+
+/**
+ * Advance turret autopilot. Returns the new hull-relative turret angle and
+ * sets `aimed` when within firing tolerance of a live target.
+ */
+function stepDemoTurret(
+  d: DemoState,
+  delta: number,
+  x: number,
+  z: number,
+  heading: number,
+  turret: number,
+  enemies: Enemy[]
+): number {
+  let current: Enemy | null = null;
+  let currentDist = Infinity;
+  let nearest: Enemy | null = null;
+  let nearestDist = Infinity;
+  for (const e of enemies) {
+    if (e.health <= 0) continue;
+    const dist = Math.hypot(e.position[0] - x, e.position[2] - z);
+    if (dist < nearestDist) {
+      nearestDist = dist;
+      nearest = e;
+    }
+    if (e.id === d.targetId) {
+      current = e;
+      currentDist = dist;
+    }
+  }
+  const target =
+    current && !(nearest && nearestDist < currentDist * DEMO_RETARGET_RATIO)
+      ? current
+      : nearest;
+  d.targetId = target ? target.id : null;
+
+  const desired = target
+    ? Math.atan2(target.position[0] - x, target.position[2] - z) - heading
+    : 0;
+  const err = wrapAngle(desired - turret);
+
+  // Critically-damped spring, velocity-capped: eases in and out, never snaps
+  const dt = Math.min(delta, 0.05);
+  const w = DEMO_TURRET_OMEGA;
+  d.turretVel += (w * w * err - 2 * w * d.turretVel) * dt;
+  d.turretVel = Math.max(
+    -DEMO_TURRET_MAX_VEL,
+    Math.min(DEMO_TURRET_MAX_VEL, d.turretVel)
+  );
+  d.aimed = target !== null && Math.abs(err) < DEMO_FIRE_TOLERANCE;
+
+  let next = (turret + d.turretVel * dt) % (Math.PI * 2);
+  if (next < 0) next += Math.PI * 2;
+  return next;
+}
+// ---------------------------------------------------------------------------
 
 type WeaponComponentType = React.ComponentType<{
   weaponInstance: WeaponInstance;
@@ -71,6 +227,7 @@ const Tank = ({ position = [0, 0, 0], isFirstPerson = false }: TankProps) => {
   const _quat = useRef(new Quaternion()).current;
   const _euler = useRef(new Euler()).current;
   const prevPovToggleRef = useRef(false);
+  const demoRef = useRef<DemoState>(createDemoState());
 
   // Use shared hooks for collision detection and projectile management
   const { checkTerrainCollision } = useTankCollision({
@@ -163,6 +320,7 @@ const Tank = ({ position = [0, 0, 0], isFirstPerson = false }: TankProps) => {
         rockAngleRef.current = 0;
         rockVelRef.current = 0;
         recoilRef.current = 0;
+        demoRef.current = createDemoState();
         tankRef.current.position.set(0, 0.5, 0);
         tankRef.current.quaternion.setFromAxisAngle(upVector, SPAWN_HEADING);
         if (turretRef.current) turretRef.current.rotation.y = 0;
@@ -187,7 +345,20 @@ const Tank = ({ position = [0, 0, 0], isFirstPerson = false }: TankProps) => {
 
     const currentQuat = tankRef.current.quaternion;
 
-    if (keyLeft) {
+    const demoEnemies = DEMO ? useGameState.getState().enemies : null;
+
+    if (demoEnemies) {
+      stepDemoHull(
+        demoRef.current,
+        delta,
+        tankRef.current.position.x,
+        tankRef.current.position.z,
+        tankRotationRef.current,
+        demoEnemies
+      );
+      _quat.setFromAxisAngle(upVector, demoRef.current.steer * delta);
+      currentQuat.multiply(_quat);
+    } else if (keyLeft) {
       _quat.setFromAxisAngle(upVector, delta * turnSpeed);
       currentQuat.multiply(_quat);
     } else if (keyRight) {
@@ -208,7 +379,13 @@ const Tank = ({ position = [0, 0, 0], isFirstPerson = false }: TankProps) => {
     let potentialZ = tankRef.current.position.z;
     let intendedMovementMagnitude = 0;
 
-    if (keyForward || keyBackward) {
+    if (demoEnemies) {
+      intendedMovementMagnitude = demoRef.current.throttle;
+      potentialX +=
+        Math.sin(tankRotationRef.current) * delta * moveSpeed * intendedMovementMagnitude;
+      potentialZ +=
+        Math.cos(tankRotationRef.current) * delta * moveSpeed * intendedMovementMagnitude;
+    } else if (keyForward || keyBackward) {
       intendedMovementMagnitude = keyForward ? 1 : -1;
       potentialX +=
         Math.sin(tankRotationRef.current) *
@@ -274,43 +451,57 @@ const Tank = ({ position = [0, 0, 0], isFirstPerson = false }: TankProps) => {
     }
 
     setIsBraking(
-      keyBackward || (!moved && (keyForward || moveX !== 0 || moveZ !== 0))
+      demoEnemies
+        ? !moved
+        : keyBackward || (!moved && (keyForward || moveX !== 0 || moveZ !== 0))
     );
 
     if (turretRef.current) {
-      if (keyTurretLeft) turretRotationRef.current += delta * turretTurnSpeed;
-      if (keyTurretRight) turretRotationRef.current -= delta * turretTurnSpeed;
+      if (demoEnemies) {
+        turretRotationRef.current = stepDemoTurret(
+          demoRef.current,
+          delta,
+          tankRef.current.position.x,
+          tankRef.current.position.z,
+          tankRotationRef.current,
+          turretRotationRef.current,
+          demoEnemies
+        );
+      } else {
+        if (keyTurretLeft) turretRotationRef.current += delta * turretTurnSpeed;
+        if (keyTurretRight) turretRotationRef.current -= delta * turretTurnSpeed;
 
-      if (touchTurretRotation !== null) {
-        const targetAbsoluteAngle = touchTurretRotation;
-        const currentTankAngle = tankRotationRef.current;
+        if (touchTurretRotation !== null) {
+          const targetAbsoluteAngle = touchTurretRotation;
+          const currentTankAngle = tankRotationRef.current;
 
-        let desiredRelativeAngle = targetAbsoluteAngle - currentTankAngle;
+          let desiredRelativeAngle = targetAbsoluteAngle - currentTankAngle;
 
-        while (desiredRelativeAngle < 0) desiredRelativeAngle += Math.PI * 2;
-        while (desiredRelativeAngle >= Math.PI * 2)
-          desiredRelativeAngle -= Math.PI * 2;
+          while (desiredRelativeAngle < 0) desiredRelativeAngle += Math.PI * 2;
+          while (desiredRelativeAngle >= Math.PI * 2)
+            desiredRelativeAngle -= Math.PI * 2;
 
-        const turretLerpFactor = isFirstPerson
-          ? 1.0 - Math.exp(-turnSpeed * delta * 1.5)
-          : 1.0 - Math.exp(-turnSpeed * delta * 5.0);
+          const turretLerpFactor = isFirstPerson
+            ? 1.0 - Math.exp(-turnSpeed * delta * 1.5)
+            : 1.0 - Math.exp(-turnSpeed * delta * 5.0);
 
-        let angleDifference = desiredRelativeAngle - turretRotationRef.current;
+          let angleDifference = desiredRelativeAngle - turretRotationRef.current;
 
-        if (angleDifference > Math.PI) angleDifference -= Math.PI * 2;
-        if (angleDifference < -Math.PI) angleDifference += Math.PI * 2;
+          if (angleDifference > Math.PI) angleDifference -= Math.PI * 2;
+          if (angleDifference < -Math.PI) angleDifference += Math.PI * 2;
 
-        turretRotationRef.current += angleDifference * turretLerpFactor;
+          turretRotationRef.current += angleDifference * turretLerpFactor;
 
-        while (turretRotationRef.current < 0)
-          turretRotationRef.current += Math.PI * 2;
-        while (turretRotationRef.current >= Math.PI * 2)
-          turretRotationRef.current -= Math.PI * 2;
-      } else if (keyTurretLeft || keyTurretRight) {
-        while (turretRotationRef.current < 0)
-          turretRotationRef.current += Math.PI * 2;
-        while (turretRotationRef.current >= Math.PI * 2)
-          turretRotationRef.current -= Math.PI * 2;
+          while (turretRotationRef.current < 0)
+            turretRotationRef.current += Math.PI * 2;
+          while (turretRotationRef.current >= Math.PI * 2)
+            turretRotationRef.current -= Math.PI * 2;
+        } else if (keyTurretLeft || keyTurretRight) {
+          while (turretRotationRef.current < 0)
+            turretRotationRef.current += Math.PI * 2;
+          while (turretRotationRef.current >= Math.PI * 2)
+            turretRotationRef.current -= Math.PI * 2;
+        }
       }
 
       turretRef.current.rotation.y = turretRotationRef.current;
@@ -330,9 +521,11 @@ const Tank = ({ position = [0, 0, 0], isFirstPerson = false }: TankProps) => {
     }
 
     const currentTime = state.clock.getElapsedTime();
-    const isShootingRequested = keyShoot || touchIsFiring;
+    const isShootingRequested = demoEnemies
+      ? demoRef.current.aimed
+      : keyShoot || touchIsFiring;
 
-    if (canShoot(currentTime, playerFireRate)) {
+    if ((!demoEnemies || isShootingRequested) && canShoot(currentTime, playerFireRate)) {
       const shootPosition: [number, number, number] = [
         tankRef.current.position.x +
           Math.sin(tankRotationRef.current + turretRotationRef.current) * MUZZLE_Z,
