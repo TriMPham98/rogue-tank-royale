@@ -189,3 +189,38 @@ export function createMuzzleFlashMaterial(): MeshStandardMaterial {
     metalness: 0,
   });
 }
+
+/** Extra trim used by the redesigned enemy roster (raider tank, bastion turret, hornet drone). */
+export const ENEMY_TRIM_MATS = {
+  redGlow: standard("#ff4a3a", {
+    emissive: new Color("#ff1a0a"),
+    emissiveIntensity: 2.4,
+    roughness: 0.3,
+    metalness: 0.1,
+    toneMapped: false,
+  }),
+  blueGlow: standard("#8fd2ff", {
+    emissive: new Color("#2a9dff"),
+    emissiveIntensity: 2.2,
+    roughness: 0.3,
+    metalness: 0.1,
+    toneMapped: false,
+  }),
+  amberGlow: standard("#ffc04a", {
+    emissive: new Color("#ff8a00"),
+    emissiveIntensity: 2.0,
+    roughness: 0.3,
+    metalness: 0.1,
+    toneMapped: false,
+  }),
+  era: standard("#6e1a18", { roughness: 0.62, metalness: 0.38 }),
+  gunmetal: standard("#2c2f36", { roughness: 0.34, metalness: 0.86 }),
+  sandbag: standard("#8a7a58", { roughness: 0.95, metalness: 0.02 }),
+  dish: standard("#c9d2de", { roughness: 0.3, metalness: 0.75 }),
+  rotor: standard("#15171b", {
+    roughness: 0.5,
+    metalness: 0.4,
+    transparent: true,
+    opacity: 0.7,
+  }),
+};
